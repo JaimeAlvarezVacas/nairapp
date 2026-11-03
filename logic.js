@@ -3,7 +3,8 @@ const CHEAT = 'Cheat meal';
 const BACKUP_EVERY_MS = 7 * 24 * 60 * 60 * 1000;
 
 const emptyOptions = () => ({ desayuno: [], comida: [], merienda: [], cena: [] });
-const emptyState = () => ({ options: emptyOptions(), log: {}, lastBackup: null });
+const emptyDetails = () => ({ desayuno: {}, comida: {}, merienda: {}, cena: {} });
+const emptyState = () => ({ options: emptyOptions(), details: emptyDetails(), log: {}, lastBackup: null });
 
 // Local time on purpose: toISOString() would put a late dinner on the wrong day.
 function dateKey(d) {
@@ -47,8 +48,9 @@ const cheatNote = text => (text || '').slice(CHEAT.length + 2);
 
 const normalize = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-// Each box holds one option per line. A "# Comida" line sends what follows to that meal,
-// so the whole plan can be pasted into one box and replace the meals it names.
+// Each box holds one option per line, and "- " lines below an option are its ingredients.
+// A "# Comida" line sends what follows to that meal, so the whole plan can be pasted
+// into one box and replace the meals it names.
 function parseBoxes(boxes) {
   const named = {};
   const plain = {};
@@ -56,28 +58,53 @@ function parseBoxes(boxes) {
     const lines = (boxes[meal] || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     const target = lines.some(l => l.startsWith('#')) ? named : plain;
     let current = meal;
+    let last = null;
     for (const line of lines) {
       if (line.startsWith('#')) {
         const header = normalize(line.replace(/^#+/, '').replace(/:$/, '').trim());
         if (!MEALS.includes(header)) throw new Error(`No reconozco la cabecera "${line}"`);
         current = header;
-        named[current] = named[current] || [];
+        named[current] = named[current] || new Map();
+        last = null;
       } else {
-        target[current] = target[current] || [];
-        target[current].push(line.replace(/^[-•*]\s*/, ''));
+        target[current] = target[current] || new Map();
+        const text = line.replace(/^[-•*]\s*/, '');
+        if (text !== line && last) {
+          last.push(text);
+        } else {
+          if (!target[current].has(text)) target[current].set(text, []);
+          last = target[current].get(text);
+        }
       }
     }
   }
   const options = emptyOptions();
-  for (const meal of MEALS) options[meal] = [...new Set(named[meal] || plain[meal] || [])];
-  return options;
+  const details = emptyDetails();
+  for (const meal of MEALS) {
+    const entries = [...(named[meal] || plain[meal] || [])];
+    options[meal] = entries.map(([name]) => name);
+    details[meal] = Object.fromEntries(entries.filter(([, lines]) => lines.length));
+  }
+  return { options, details };
 }
 
+const detailsOf = (details, meal, name) => (Object.hasOwn(details[meal], name) ? details[meal][name] : []);
+
+const formatBox = (state, meal) => state.options[meal]
+  .flatMap(name => [name, ...detailsOf(state.details, meal, name).map(line => `- ${line}`)])
+  .join('\n');
+
 const isTextList = v => Array.isArray(v) && v.every(s => typeof s === 'string');
+
+function isValidDetails(details) {
+  return details && typeof details === 'object' && MEALS.every(m =>
+    details[m] && typeof details[m] === 'object' && Object.values(details[m]).every(isTextList));
+}
 
 function isValidData(d) {
   if (!d || typeof d.options !== 'object' || !d.options || typeof d.log !== 'object' || !d.log) return false;
   if (!MEALS.every(m => isTextList(d.options[m]))) return false;
+  if (d.details !== undefined && !isValidDetails(d.details)) return false;
   return Object.entries(d.log).every(([key, day]) =>
     /^\d{4}-\d{2}-\d{2}$/.test(key) && day && typeof day === 'object' &&
     Object.entries(day).every(([meal, text]) => MEALS.includes(meal) && typeof text === 'string' && text));
@@ -89,14 +116,14 @@ function loadState(raw) {
   try {
     const parsed = JSON.parse(raw);
     if (!isValidData(parsed)) throw new Error('invalid');
-    return { state: { lastBackup: null, ...parsed }, corrupt: null };
+    return { state: { ...emptyState(), ...parsed }, corrupt: null };
   } catch {
     return { state: emptyState(), corrupt: raw };
   }
 }
 
 const makeBackup = (state, now) => ({
-  app: 'comidas', v: 1, createdAt: now.toISOString(), options: state.options, log: state.log,
+  app: 'comidas', v: 1, createdAt: now.toISOString(), options: state.options, details: state.details, log: state.log,
 });
 
 function parseBackup(text) {
@@ -128,6 +155,7 @@ function mergeBackup(state, backup) {
   return {
     state: {
       options: hasOptions ? state.options : backup.options,
+      details: hasOptions ? state.details : backup.details || emptyDetails(),
       log,
       lastBackup: newer ? backup.createdAt : state.lastBackup,
     },
@@ -143,6 +171,6 @@ function needsBackup(state, now) {
 if (typeof module !== 'undefined') {
   module.exports = {
     MEALS, CHEAT, emptyState, dateKey, addDays, isWeekend, setMeal, toggle, isCheat, cheatText, cheatNote,
-    parseBoxes, loadState, makeBackup, parseBackup, mergeBackup, needsBackup,
+    parseBoxes, detailsOf, formatBox, loadState, makeBackup, parseBackup, mergeBackup, needsBackup,
   };
 }

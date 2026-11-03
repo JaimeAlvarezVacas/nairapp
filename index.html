@@ -61,6 +61,13 @@
     border-color: var(--accent); background: var(--accent);
     box-shadow: inset 0 0 0 4px var(--card);
   }
+  .ingredients { margin: -4px 0 10px; padding-left: 14px; color: var(--muted); font-size: 15px; }
+  .ingredients summary { min-height: 36px; display: flex; align-items: center; color: var(--accent); cursor: pointer; }
+  .ingredients summary::before { content: "›"; margin-right: 8px; font-size: 18px; line-height: 1; }
+  .ingredients[open] summary::before { transform: rotate(90deg); }
+  .ingredients summary::-webkit-details-marker { display: none; }
+  .ingredients ul { margin: 0 0 4px; padding-left: 20px; color: var(--text); }
+  .ingredients li { margin-bottom: 3px; }
   .field {
     width: 100%; padding: 10px 12px; background: var(--card);
     border: 1px solid var(--line); border-radius: 12px; font-size: 16px;
@@ -102,6 +109,7 @@ let tab = 'hoy';
 let viewDay = null; // null follows today, so the app rolls over at midnight
 let corruptFound = false;
 let state = emptyState();
+const openDetails = new Set(); // keeps quantities open across re-renders, e.g. after locking the phone while cooking
 
 try {
   const loaded = loadState(localStorage.getItem(KEY));
@@ -193,14 +201,24 @@ function banners() {
 function mealSection(day, meal) {
   const selected = state.log[day]?.[meal];
   const pick = text => { toggle(state.log, day, meal, text); save(); render(); };
-  const option = text => el('button', {
-    className: 'option', 'aria-pressed': String(selected === text), onclick: () => pick(text),
-  }, text);
+  const option = text => {
+    const button = el('button', {
+      className: 'option', 'aria-pressed': String(selected === text), onclick: () => pick(text),
+    }, text);
+    const lines = detailsOf(state.details, meal, text);
+    if (!lines.length) return [button];
+    const id = `${meal}/${text}`;
+    return [button, el('details', {
+      className: 'ingredients',
+      open: openDetails.has(id),
+      ontoggle: e => { if (e.target.open) openDetails.add(id); else openDetails.delete(id); },
+    }, el('summary', {}, 'Ver cantidades'), el('ul', {}, ...lines.map(line => el('li', {}, line))))];
+  };
 
   const list = [...state.options[meal]];
   // A choice from an older plan stays visible so it can still be seen and undone.
   if (selected && !list.includes(selected) && !(isCheat(selected) && isWeekend(day))) list.push(selected);
-  const section = el('section', {}, el('h2', {}, LABELS[meal]), ...list.map(option));
+  const section = el('section', {}, el('h2', {}, LABELS[meal]), ...list.flatMap(option));
 
   if (isWeekend(day)) {
     const cheatOn = isCheat(selected);
@@ -269,12 +287,12 @@ function renderPauta() {
   const boxes = {};
   for (const meal of MEALS) {
     boxes[meal] = el('textarea', {
-      className: 'field', id: `box-${meal}`, value: state.options[meal].join('\n'),
+      className: 'field', id: `box-${meal}`, value: formatBox(state, meal),
     });
   }
   const onSave = () => {
     try {
-      state.options = parseBoxes(Object.fromEntries(MEALS.map(m => [m, boxes[m].value])));
+      Object.assign(state, parseBoxes(Object.fromEntries(MEALS.map(m => [m, boxes[m].value]))));
     } catch (e) {
       alert(`${e.message}. Usa Desayuno, Comida, Merienda o Cena. No se ha guardado nada.`);
       return;
@@ -285,7 +303,7 @@ function renderPauta() {
     render();
   };
   app.append(
-    el('p', { className: 'muted' }, 'Una opción por línea. Tu historial no cambia al actualizar la pauta.'),
+    el('p', { className: 'muted' }, 'Una opción por línea, con sus cantidades debajo empezando por guion (- 40 g de avena). Tu historial no cambia al actualizar la pauta.'),
     ...MEALS.flatMap(meal => [
       el('h2', {}, el('label', { htmlFor: `box-${meal}` }, LABELS[meal])),
       boxes[meal],
