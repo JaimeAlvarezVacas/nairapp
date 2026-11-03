@@ -13,13 +13,6 @@ test('addDays cruza meses y cambios de hora', () => {
   assert.equal(l.addDays('2026-01-01', -1), '2025-12-31');
 });
 
-test('isWeekend solo en sábado y domingo', () => {
-  assert.equal(l.isWeekend('2026-11-06'), false);
-  assert.equal(l.isWeekend('2026-11-07'), true);
-  assert.equal(l.isWeekend('2026-11-08'), true);
-  assert.equal(l.isWeekend('2026-11-09'), false);
-});
-
 test('setMeal marca, cambia y desmarca sin dejar días vacíos', () => {
   const log = {};
   l.setMeal(log, '2026-11-03', 'cena', 'Tortilla');
@@ -362,4 +355,118 @@ test('datos sin calorías siguen funcionando y las calorías inválidas se recha
   for (const bad of [{ kcal: { ayer: {} } }, { kcal: { '2026-11-03': { snack: 1 } } }, { kcal: { '2026-11-03': { cena: -1 } } }, { energy: { cena: {} } }, { energy: { desayuno: {}, comida: {}, merienda: {}, cena: { Sopa: '300' } } }]) {
     assert.throws(() => l.parseBackup(JSON.stringify({ ...old, ...bad })), /copia válida/);
   }
+});
+
+const foodPlan = [
+  '# Cena',
+  'Fideos',
+  '- 100 g de fideos de arroz',
+  '- 50 ml de caldo',
+  '- Sal al gusto',
+  'Revuelto',
+  '- 2 huevos + 100 g de claras',
+  '- 1 kiwi',
+  'Misterio',
+  '- 100 g de ingrediente raro',
+  '# Alimentos',
+  'arroz = 300',
+  'fideos de arroz = 360',
+  'caldo = 10,5 kcal',
+  'claras = 48',
+  'huevo = 75 /ud',
+  'kiwi = 45 /ud',
+].join('\n');
+const foodState = () => ({ ...l.emptyState(), ...l.parseBoxes({ desayuno: foodPlan }) });
+
+test('los alimentos se leen de la pauta y se pueden volver a escribir', () => {
+  const state = foodState();
+  assert.deepEqual(state.foods.caldo, { kcal: 10.5, unit: '100' });
+  assert.deepEqual(state.foods.huevo, { kcal: 75, unit: 'ud' });
+  assert.equal(l.formatBox(state, 'alimentos').split('\n')[4], 'huevo = 75 /ud');
+  const again = l.parseBoxes(Object.fromEntries(l.SECTIONS.map(s => [s, l.formatBox(state, s)])));
+  assert.deepEqual(again.foods, state.foods);
+  assert.throws(() => l.parseBoxes({ alimentos: 'arroz' }), /No entiendo el alimento/);
+  assert.throws(() => l.parseBoxes({ alimentos: 'arroz = mucho' }), /No entiendo el alimento/);
+});
+
+test('cada parte de un ingrediente usa su alimento más concreto', () => {
+  const state = foodState();
+  assert.equal(l.foodFor(state, '100 g de fideos de arroz'), 'fideos de arroz');
+  assert.deepEqual(l.partsOf('2 huevos + 100 g de claras'), ['2 huevos', '100 g de claras']);
+  assert.equal(l.partKcal(state, '2 huevos').kcal, 150);
+  assert.equal(l.partKcal(state, '100 g de claras').kcal, 48);
+  assert.equal(l.partKcal(state, '100 g de ingrediente raro'), null);
+  assert.equal(l.partKcal(state, 'Arroz al gusto'), null);
+  assert.equal(l.partKcal(state, 'Un poco de arroz'), null);
+});
+
+test('las kcal de una opción salen de sus alimentos, con la de la pauta como reserva', () => {
+  const state = foodState();
+  assert.equal(l.optionKcal(state, 'cena', 'Fideos'), 365);
+  assert.equal(l.optionKcal(state, 'cena', 'Revuelto'), 243);
+  assert.equal(l.optionKcal(state, 'cena', 'Misterio'), null);
+  assert.equal(l.optionKcal(state, 'cena', 'No existe'), null);
+  const withFigure = { ...l.emptyState(), ...l.parseBoxes({ cena: 'Sopa\n= 300' }) };
+  assert.equal(l.optionKcal(withFigure, 'cena', 'Sopa'), 300);
+});
+
+test('los datos de un envase se convierten a kcal por 100 g', () => {
+  assert.equal(l.packToPer100('500', '700'), 140);
+  assert.equal(l.packToPer100('100', '152,5'), 152.5);
+  assert.equal(l.packToPer100('250,5', '0'), 0);
+  for (const [pack, kcal] of [['0', '700'], ['', '700'], ['500', ''], ['500', '-1'], ['abc', '700'], ['5', '700']]) {
+    assert.equal(l.packToPer100(pack, kcal), null, `${pack}/${kcal}`);
+  }
+});
+
+test('cambiar un alimento afecta a sus recetas y al día en curso, no a días pasados', () => {
+  const state = foodState();
+  l.setMeal(state.log, '2026-11-01', 'cena', 'Fideos');
+  l.setMeal(state.log, '2026-11-03', 'cena', 'Fideos');
+  l.setFoodEdit(state, 'caldo', { kcal: 110, unit: '100' }, '2026-11-03');
+  assert.equal(l.mealKcal(state, '2026-11-01', 'cena'), 365);
+  assert.equal(l.mealKcal(state, '2026-11-03', 'cena'), 415);
+  assert.equal(l.optionKcal(state, 'cena', 'Fideos'), 415);
+  l.setFoodEdit(state, 'caldo', null, '2026-11-03');
+  assert.equal(l.mealKcal(state, '2026-11-01', 'cena'), 365);
+  assert.equal(l.mealKcal(state, '2026-11-03', 'cena'), 365);
+  assert.deepEqual(state.foodEdits, {});
+});
+
+test('un cheat meal en el día en curso sigue sin calorías al cambiar un alimento', () => {
+  const state = foodState();
+  l.setMeal(state.log, '2026-11-03', 'cena', 'Cheat meal: pizza');
+  l.setFoodEdit(state, 'caldo', { kcal: 110, unit: '100' }, '2026-11-03');
+  assert.equal(l.mealKcal(state, '2026-11-03', 'cena'), null);
+});
+
+test('una pauta nueva conserva los alimentos corregidos', () => {
+  const state = foodState();
+  l.setFoodEdit(state, 'caldo', { kcal: 110, unit: '100' }, '2026-11-03');
+  Object.assign(state, l.applyPaste(state, '# Comida\nCrema\n- 100 g de caldo\n# Alimentos\ncaldo = 5'));
+  assert.equal(state.foods.caldo.kcal, 5);
+  assert.equal(l.optionKcal(state, 'comida', 'Crema'), 110);
+});
+
+test('la copia guarda los alimentos y al restaurar ganan los del móvil', () => {
+  const other = foodState();
+  other.foodEdits = { caldo: { kcal: 110, unit: '100' }, claras: { kcal: 50, unit: '100' } };
+  const back = l.parseBackup(JSON.stringify(l.makeBackup(other, new Date('2026-11-03T20:00:00Z'))));
+  const empty = l.mergeBackup(l.emptyState(), back).state;
+  assert.deepEqual(empty.foods, other.foods);
+  const phone = foodState();
+  phone.foodEdits = { caldo: { kcal: 20, unit: '100' } };
+  assert.deepEqual(l.mergeBackup(phone, back).state.foodEdits, { caldo: { kcal: 20, unit: '100' }, claras: { kcal: 50, unit: '100' } });
+  const { options, log } = l.emptyState();
+  const old = { app: 'comidas', v: 1, createdAt: '2026-11-03T00:00:00Z', options, log };
+  assert.deepEqual(l.mergeBackup(l.emptyState(), l.parseBackup(JSON.stringify(old))).state.foodEdits, {});
+  for (const bad of [{ foods: { a: { kcal: -1, unit: '100' } } }, { foods: { a: { kcal: 1, unit: 'kg' } } }, { foodEdits: { a: 5 } }, { foods: 'x' }]) {
+    assert.throws(() => l.parseBackup(JSON.stringify({ ...old, ...bad })), /copia válida/);
+  }
+});
+
+test('nombres raros de alimento no rompen nada', () => {
+  const state = { ...l.emptyState(), ...l.parseBoxes({ cena: 'Sopa\n- 100 g de constructor', alimentos: '__proto__ = 5\nconstructor = 100' }) };
+  assert.equal(l.optionKcal(state, 'cena', 'Sopa'), 100);
+  assert.equal({}.kcal, undefined);
 });

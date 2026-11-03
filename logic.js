@@ -1,6 +1,7 @@
 const MEALS = ['desayuno', 'comida', 'merienda', 'cena'];
 const GENERAL = 'consejos';
-const SECTIONS = [...MEALS, GENERAL];
+const FOODS = 'alimentos';
+const SECTIONS = [...MEALS, GENERAL, FOODS];
 const CHEAT = 'Cheat meal';
 const BACKUP_EVERY_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -8,7 +9,7 @@ const emptyOptions = () => ({ desayuno: [], comida: [], merienda: [], cena: [] }
 const emptyDetails = () => ({ desayuno: {}, comida: {}, merienda: {}, cena: {} });
 const emptyTips = () => ({ desayuno: [], comida: [], merienda: [], cena: [], consejos: [] });
 const emptyState = () => ({
-  options: emptyOptions(), details: emptyDetails(), prep: emptyDetails(), tips: emptyTips(), energy: emptyDetails(), log: {}, kcal: {}, water: {}, lastBackup: null,
+  options: emptyOptions(), details: emptyDetails(), prep: emptyDetails(), tips: emptyTips(), energy: emptyDetails(), foods: {}, foodEdits: {}, log: {}, kcal: {}, water: {}, lastBackup: null,
 });
 
 // Local time on purpose: toISOString() would put a late dinner on the wrong day.
@@ -26,11 +27,6 @@ function addDays(key, n) {
   const d = keyToDate(key);
   d.setDate(d.getDate() + n);
   return dateKey(d);
-}
-
-function isWeekend(key) {
-  const day = keyToDate(key).getDay();
-  return day === 0 || day === 6;
 }
 
 function setMeal(log, key, meal, text) {
@@ -56,10 +52,64 @@ function setKcal(kcal, key, meal, value) {
 
 const energyOf = (state, meal, name) => (Object.hasOwn(state.energy[meal], name) ? state.energy[meal][name] : null);
 
+// A line such as "1 huevo + 100 g de claras" holds one food per part.
+const partsOf = line => line.split(/\s\+\s/);
+
+const toNumber = text => (String(text).trim() ? Number(String(text).trim().replace(',', '.')) : NaN);
+
+// A part belongs to the longest food name it contains, so "fideos de arroz" isn't "arroz".
+function foodFor(state, part) {
+  const text = normalize(part);
+  return [...new Set([...Object.keys(state.foods), ...Object.keys(state.foodEdits)])]
+    .filter(name => text.includes(normalize(name)))
+    .sort((a, b) => b.length - a.length)[0] ?? null;
+}
+
+const foodValue = (state, food) => (Object.hasOwn(state.foodEdits, food) ? state.foodEdits[food] : state.foods[food]);
+
+// Foods count per 100 g or ml, or per unit (unit "ud") when the plan gives pieces.
+function partKcal(state, part) {
+  if (/al gusto$/i.test(part)) return null;
+  const food = foodFor(state, part);
+  if (!food) return null;
+  const { kcal, unit } = foodValue(state, food);
+  const amount = unit === 'ud'
+    ? part.match(/^(\d+(?:[.,]\d+)?)/)?.[1]
+    : part.match(/(\d+(?:[.,]\d+)?)\s*(?:gr|g|ml)\b/i)?.[1];
+  if (amount === undefined) return null;
+  const quantity = toNumber(amount);
+  return { food, unit, per: kcal, quantity, kcal: unit === 'ud' ? quantity * kcal : quantity * kcal / 100 };
+}
+
+// Ingredients with a known food win; "= N kcal" on the option is the fallback.
+function optionKcal(state, meal, name) {
+  const known = detailsOf(state.details, meal, name).flatMap(partsOf).map(part => partKcal(state, part)).filter(Boolean);
+  return known.length ? Math.round(known.reduce((sum, p) => sum + p.kcal, 0)) : energyOf(state, meal, name);
+}
+
 function mealKcal(state, key, meal) {
   const chosen = state.log[key]?.[meal];
   if (!chosen) return null;
-  return state.kcal[key]?.[meal] ?? energyOf(state, meal, chosen);
+  return state.kcal[key]?.[meal] ?? optionKcal(state, meal, chosen);
+}
+
+// Past days keep their figures: only the given day takes the new value.
+function setFoodEdit(state, food, value, day) {
+  freezeKcal(state);
+  if (value) state.foodEdits[food] = value;
+  else delete state.foodEdits[food];
+  for (const meal of Object.keys(state.log[day] || {})) {
+    setKcal(state.kcal, day, meal, optionKcal(state, meal, state.log[day][meal]));
+  }
+}
+
+// Weight and kcal of a pack, as read on its label, to kcal per 100 g. Null if they can't be right.
+function packToPer100(pack, kcal) {
+  const weight = toNumber(pack);
+  const energy = toNumber(kcal);
+  if (!(weight > 0) || !(energy >= 0)) return null;
+  const per100 = Math.round(energy / weight * 1000) / 10;
+  return per100 <= 950 ? per100 : null; // pure fat is about 900
 }
 
 // missing counts marked meals without a figure, such as a cheat meal.
@@ -96,7 +146,7 @@ const normalize = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 function parseBoxes(boxes) {
   const named = {};
   const plain = {};
-  const slot = (where, section) => (where[section] = where[section] || { items: new Map(), tips: [] });
+  const slot = (where, section) => (where[section] = where[section] || { items: new Map(), tips: [], foods: new Map() });
   for (const box of SECTIONS) {
     const lines = (boxes[box] || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     const target = lines.some(l => l.startsWith('#')) ? named : plain;
@@ -113,7 +163,11 @@ function parseBoxes(boxes) {
       }
       const section = slot(target, current);
       const text = line.replace(/^[-•*>!]\s*/, '');
-      if (current === GENERAL || line[0] === '!') {
+      if (current === FOODS) {
+        const food = text.match(/^(.+?)\s*=\s*(\d+(?:[.,]\d+)?)\s*(?:kcal)?\s*(\/\s*ud)?$/i);
+        if (!food) throw new Error(`No entiendo el alimento "${line}"`);
+        section.foods.set(food[1], { kcal: toNumber(food[2]), unit: food[3] ? 'ud' : '100' });
+      } else if (current === GENERAL || line[0] === '!') {
         section.tips.push(text);
       } else if (line[0] === '=') {
         const energy = line.match(/^=\s*(\d+)\s*(?:kcal)?$/i);
@@ -129,10 +183,14 @@ function parseBoxes(boxes) {
       }
     }
   }
-  const result = { options: emptyOptions(), details: emptyDetails(), prep: emptyDetails(), tips: emptyTips(), energy: emptyDetails() };
+  const result = { options: emptyOptions(), details: emptyDetails(), prep: emptyDetails(), tips: emptyTips(), energy: emptyDetails(), foods: {} };
   for (const box of SECTIONS) {
     const section = named[box] || plain[box];
     if (!section) continue;
+    if (box === FOODS) {
+      result.foods = Object.fromEntries(section.foods);
+      continue;
+    }
     result.tips[box] = section.tips;
     if (box === GENERAL) continue;
     const entries = [...section.items];
@@ -170,6 +228,10 @@ const detailsOf = (details, meal, name) => (Object.hasOwn(details[meal], name) ?
 
 function formatBox(state, box) {
   if (box === GENERAL) return state.tips[GENERAL].join('\n');
+  if (box === FOODS) {
+    return Object.entries(state.foods)
+      .map(([name, { kcal, unit }]) => `${name} = ${kcal}${unit === 'ud' ? ' /ud' : ''}`).join('\n');
+  }
   return [
     ...state.tips[box].map(tip => `! ${tip}`),
     ...state.options[box].flatMap(name => [
@@ -188,7 +250,9 @@ function isValidDetails(details) {
     details[m] && typeof details[m] === 'object' && Object.values(details[m]).every(isTextList));
 }
 
-const isValidTips = tips => tips && typeof tips === 'object' && SECTIONS.every(s => isTextList(tips[s]));
+const isValidTips = tips => tips && typeof tips === 'object' && [...MEALS, GENERAL].every(s => isTextList(tips[s]));
+const isValidFoods = foods => foods && typeof foods === 'object' && Object.values(foods).every(f =>
+  f && Number.isFinite(f.kcal) && f.kcal >= 0 && (f.unit === '100' || f.unit === 'ud'));
 
 const isValidWater = water => water && typeof water === 'object' && Object.entries(water).every(([key, ml]) =>
   /^\d{4}-\d{2}-\d{2}$/.test(key) && Number.isInteger(ml) && ml > 0);
@@ -200,7 +264,7 @@ const isValidKcal = kcal => kcal && typeof kcal === 'object' && Object.entries(k
   /^\d{4}-\d{2}-\d{2}$/.test(key) && day && typeof day === 'object' &&
   Object.entries(day).every(([meal, v]) => MEALS.includes(meal) && isKcal(v)));
 
-// details, prep, tips, energy, kcal and water are optional: data saved by earlier versions doesn't have them.
+// details, prep, tips, energy, foods, foodEdits, kcal and water are optional: data saved by earlier versions doesn't have them.
 function isValidData(d) {
   if (!d || typeof d.options !== 'object' || !d.options || typeof d.log !== 'object' || !d.log) return false;
   if (!MEALS.every(m => isTextList(d.options[m]))) return false;
@@ -210,6 +274,8 @@ function isValidData(d) {
   if (d.water !== undefined && !isValidWater(d.water)) return false;
   if (d.energy !== undefined && !isValidEnergy(d.energy)) return false;
   if (d.kcal !== undefined && !isValidKcal(d.kcal)) return false;
+  if (d.foods !== undefined && !isValidFoods(d.foods)) return false;
+  if (d.foodEdits !== undefined && !isValidFoods(d.foodEdits)) return false;
   return Object.entries(d.log).every(([key, day]) =>
     /^\d{4}-\d{2}-\d{2}$/.test(key) && day && typeof day === 'object' &&
     Object.entries(day).every(([meal, text]) => MEALS.includes(meal) && typeof text === 'string' && text));
@@ -236,6 +302,8 @@ const makeBackup = (state, now) => ({
   prep: state.prep,
   tips: state.tips,
   energy: state.energy,
+  foods: state.foods,
+  foodEdits: state.foodEdits,
   log: state.log,
   kcal: state.kcal,
   water: state.water,
@@ -276,6 +344,8 @@ function mergeBackup(state, backup) {
       prep: hasOptions ? state.prep : backup.prep || emptyDetails(),
       tips: hasOptions ? state.tips : backup.tips || emptyTips(),
       energy: hasOptions ? state.energy : backup.energy || emptyDetails(),
+      foods: hasOptions ? state.foods : backup.foods || {},
+      foodEdits: { ...backup.foodEdits, ...state.foodEdits },
       log,
       kcal,
       water: { ...backup.water, ...state.water },
@@ -292,7 +362,8 @@ function needsBackup(state, now) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    MEALS, GENERAL, SECTIONS, CHEAT, emptyState, dateKey, addDays, isWeekend, setMeal, setKcal, energyOf, mealKcal, dayKcal, freezeKcal, addWater, formatLitres, isCheat, cheatText, cheatNote,
+    MEALS, GENERAL, FOODS, SECTIONS, CHEAT, emptyState, dateKey, addDays, setMeal, setKcal, energyOf, mealKcal,
+    partsOf, foodFor, partKcal, optionKcal, setFoodEdit, packToPer100, dayKcal, freezeKcal, addWater, formatLitres, isCheat, cheatText, cheatNote,
     parseBoxes, applyPaste, splitEmoji, splitQuantity, detailsOf, formatBox, loadState, makeBackup, parseBackup, mergeBackup, needsBackup,
   };
 }

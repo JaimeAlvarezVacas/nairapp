@@ -159,8 +159,21 @@
   .change { flex: none; min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px; background: var(--card); color: var(--c); font-size: 14px; font-weight: 600; }
   .block h3 { margin: 18px 0 8px; font: 700 15px/1.3 var(--display); color: var(--c); }
   .ingredients { list-style: none; margin: 0; padding: 0; }
-  .ingredients li { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
-  .ingredients li:first-child { border-top: 0; padding-top: 0; }
+  .ingredients li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 6px 0; min-height: 44px; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+  .ingredients li > span { flex: 1; min-width: 40%; }
+  .food-kcal { flex: none; min-height: 40px; padding: 4px 10px; border: 0; border-radius: 10px; background: var(--t); color: var(--c); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .food-form { flex: 0 0 100%; display: grid; gap: 10px; margin: 6px 0; padding: 12px; border-radius: 14px; background: var(--bg); }
+  .food-form strong { font: 700 16px/1.3 var(--display); }
+  .food-form .soft { font-size: 14px; }
+  .food-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .food-fields label { display: grid; gap: 4px; font-size: 14px; font-weight: 600; min-width: 0; }
+  .food-fields.one { grid-template-columns: 1fr; }
+  .food-form .field { background: var(--card); }
+  .food-result { font-weight: 600; color: var(--c); font-variant-numeric: tabular-nums; }
+  .food-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .food-buttons .secondary { margin: 0; }
+  .food-reset { min-height: 44px; border: 0; background: none; color: var(--c); font-weight: 600; font-size: 14px; }
+  .ingredients li:first-child { border-top: 0; }
   .ingredients b { flex: none; min-width: 52px; font-variant-numeric: tabular-nums; }
   .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
   .steps li { position: relative; padding-left: 34px; margin-bottom: 10px; counter-increment: step; overflow-wrap: anywhere; }
@@ -174,7 +187,8 @@
   .field { width: 100%; padding: 12px 14px; background: var(--bg); border: 1.5px solid var(--line); border-radius: 14px; font-size: 16px; }
   .field:focus { border-color: var(--primary); outline: 0; }
   textarea.field { min-height: 150px; resize: vertical; display: block; line-height: 1.4; }
-  .chosen-note { margin-top: 10px; }
+  .cheat-label { display: block; margin-top: 12px; font-size: 14px; font-weight: 600; }
+  textarea.chosen-note { margin-top: 4px; min-height: 88px; }
   .photo { margin-top: 10px; display: grid; gap: 8px; }
   .photo .secondary { margin: 0; }
   .photo img { display: block; width: 100%; max-height: 320px; object-fit: cover; border-radius: 14px; }
@@ -243,8 +257,8 @@
 <script src="logic.js"></script>
 <script>
 const KEY = 'comidas-v1';
-const LABELS = { desayuno: 'Desayuno', comida: 'Comida', merienda: 'Merienda', cena: 'Cena', consejos: 'Consejos' };
-const EMOJI = { desayuno: '🍳', comida: '🍲', merienda: '🍎', cena: '🌙', consejos: '💡' };
+const LABELS = { desayuno: 'Desayuno', comida: 'Comida', merienda: 'Merienda', cena: 'Cena', consejos: 'Consejos', alimentos: 'Alimentos' };
+const EMOJI = { desayuno: '🍳', comida: '🍲', merienda: '🍎', cena: '🌙', consejos: '💡', alimentos: '🏷️' };
 const CHEAT_EMOJI = '🍕';
 // shortcut: fixed goal and meals from the current plan, make them editable if a review changes them
 const WATER_GOAL_ML = 2500;
@@ -267,6 +281,7 @@ let tab = 'hoy';
 let viewDay = null; // null follows today, so the app rolls over at midnight
 let openMeal; // undefined opens the next meal to choose, null keeps them all closed
 let enterMeal = null; // the only meal that animates on this render
+let editingFood = null; // the food whose kcal form is open, with what has been typed
 let corruptFound = false;
 let state = emptyState();
 const drawnArcs = new Set();
@@ -317,6 +332,7 @@ const dayLog = day => state.log[day] || {};
 const emojiFor = (meal, text) => (isCheat(text) ? CHEAT_EMOJI : splitEmoji(text).emoji || EMOJI[meal]);
 const nameOf = text => splitEmoji(text).name;
 const kcalText = value => `≈ ${value} kcal`;
+const shortNumber = n => n.toLocaleString('es-ES', { maximumFractionDigits: 1 });
 const dayTotalText = ({ total, missing }) => `${kcalText(total)}${missing ? ` + ${missing} sin contar` : ''}`;
 
 async function saveBackup() {
@@ -479,6 +495,81 @@ function photoBlock(day, meal) {
     : [el('button', { className: 'secondary', onclick: () => picker.click() }, '📸 Foto para la nutricionista')]));
 }
 
+function foodForm(day, part, info) {
+  const { food, unit, quantity } = info;
+  const form = editingFood;
+  const perUnit = unit === 'ud';
+  const close = () => { editingFood = null; render(); };
+  const apply = value => {
+    setFoodEdit(state, food, value, day);
+    save();
+    editingFood = null;
+    render();
+    toast(value ? `Calorías de ${food} actualizadas en tus recetas.` : `${food}: vuelve al valor de la pauta.`);
+  };
+  const compute = () => {
+    if (perUnit) {
+      const kcal = toNumber(form.kcal);
+      return kcal >= 0 && kcal <= 2000 ? kcal : null;
+    }
+    return packToPer100(form.pack, form.kcal);
+  };
+  const result = el('p', { className: 'food-result', 'aria-live': 'polite' });
+  const refresh = () => {
+    const value = compute();
+    if (value === null) result.textContent = 'Revisa los datos de la etiqueta';
+    else if (perUnit) result.textContent = `En esta receta: ≈ ${Math.round(quantity * value)} kcal`;
+    else result.textContent = `${shortNumber(value)} kcal por 100. En esta receta: ≈ ${Math.round(quantity * value / 100)} kcal`;
+  };
+  const input = (label, key, placeholder) => el('label', {}, label, el('input', {
+    className: 'field', inputMode: 'decimal', placeholder, value: form[key],
+    oninput: e => { form[key] = e.target.value; refresh(); },
+  }));
+  refresh();
+  return el('div', { className: 'food-form' },
+    el('strong', {}, food.replace(/^./, c => c.toUpperCase())),
+    el('p', { className: 'soft' }, perUnit
+      ? 'Se aplica a todas tus recetas con este alimento, desde este día.'
+      : 'Copia los datos de tu producto: peso y calorías del envase, o 100 y las kcal por 100 g de la etiqueta. Se aplica a todas tus recetas con este alimento, desde este día.'),
+    el('div', { className: `food-fields${perUnit ? ' one' : ''}` },
+      ...(perUnit ? [] : [input('Peso (g o ml)', 'pack', '500')]),
+      input(perUnit ? 'Calorías por unidad' : 'Calorías (kcal)', 'kcal', '700')),
+    result,
+    el('div', { className: 'food-buttons' },
+      el('button', { className: 'secondary', onclick: close }, 'Cancelar'),
+      el('button', {
+        className: 'primary',
+        onclick: () => {
+          const value = compute();
+          if (value === null) toast('Revisa los datos: no parecen correctos.');
+          else apply({ kcal: value, unit });
+        },
+      }, 'Guardar')),
+    ...(Object.hasOwn(state.foodEdits, food)
+      ? [el('button', { className: 'food-reset', onclick: () => apply(null) }, 'Volver al valor de la pauta')]
+      : []));
+}
+
+function ingredientRow(day, meal, part) {
+  const { qty, name } = splitQuantity(part);
+  const info = partKcal(state, part);
+  const id = info && `${meal}/${part}`;
+  const open = info && editingFood?.id === id;
+  return el('li', {},
+    ...(qty ? [el('b', {}, qty)] : []),
+    el('span', {}, name),
+    ...(info ? [el('button', {
+      className: 'food-kcal',
+      'aria-label': `Cambiar calorías de ${info.food}: ahora ${Math.round(info.kcal)} kcal`,
+      'aria-expanded': String(!!open),
+      onclick: () => {
+        editingFood = open ? null : { id, pack: '100', kcal: String(info.per).replace('.', ',') };
+        render();
+      },
+    }, `≈ ${Math.round(info.kcal)} kcal ✏️`)] : []),
+    ...(open ? [foodForm(day, part, info)] : []));
+}
+
 function chosenBody(day, meal, selected, pick) {
   const cheat = isCheat(selected);
   const lines = cheat ? [] : detailsOf(state.details, meal, selected);
@@ -488,17 +579,15 @@ function chosenBody(day, meal, selected, pick) {
     el('div', { className: 'chosen-head' },
       el('strong', {}, cheat ? CHEAT : nameOf(selected)),
       el('button', { className: 'change', 'aria-label': `Cambiar ${LABELS[meal]}`, onclick: () => pick(null) }, 'Cambiar')),
-    ...(cheat ? [el('input', {
-      className: 'field chosen-note', placeholder: 'Qué ha sido (opcional)…', 'aria-label': `Cheat meal de ${LABELS[meal]}: qué ha sido`,
+    ...(cheat ? [el('label', { className: 'cheat-label', htmlFor: `cheat-${meal}` }, '¿Qué has comido?'), el('textarea', {
+      className: 'field chosen-note', id: `cheat-${meal}`, rows: 3,
+      placeholder: 'Pasta carbonara, un provolone y un postre…',
       value: cheatNote(selected),
       oninput: e => { setMeal(state.log, day, meal, cheatText(e.target.value)); save(); },
     })] : []),
     ...(PHOTO_MEALS.includes(meal) ? [photoBlock(day, meal)] : []),
     ...(lines.length ? [el('section', { className: 'block' }, el('h3', {}, 'Ingredientes'),
-      el('ul', { className: 'ingredients' }, ...lines.map(line => {
-        const { qty, name } = splitQuantity(line);
-        return el('li', {}, ...(qty ? [el('b', {}, qty)] : []), el('span', {}, name));
-      })))] : []),
+      el('ul', { className: 'ingredients' }, ...lines.flatMap(partsOf).map(part => ingredientRow(day, meal, part))))] : []),
     ...(prep.length ? [el('section', { className: 'block' }, el('h3', {}, 'Preparación'),
       el('ol', { className: `steps${prep.length === 1 ? ' single' : ''}` }, ...prep.map(step => el('li', {}, step))))] : []),
     ...(tips.length ? [el('section', { className: 'block' }, el('h3', {}, 'Consejos'),
@@ -513,13 +602,13 @@ function mealCard(day, meal, isOpen) {
   const selected = dayLog(day)[meal];
   const pick = text => {
     setMeal(state.log, day, meal, text);
-    setKcal(state.kcal, day, meal, text ? energyOf(state, meal, text) : null);
+    setKcal(state.kcal, day, meal, text ? optionKcal(state, meal, text) : null);
     save();
     openMeal = meal;
     enterMeal = meal;
     render();
   };
-  const names = [...state.options[meal], ...(isWeekend(day) ? [CHEAT] : [])];
+  const names = [...state.options[meal], CHEAT];
   const subtitle = selected
     ? (isOpen ? 'Tu elección' : nameOf(selected))
     : (names.length ? 'Elige qué has comido' : 'Sin opciones en la pauta');
@@ -537,7 +626,7 @@ function mealCard(day, meal, isOpen) {
       },
       el('em', { 'aria-hidden': 'true' }, emojiFor(meal, option)),
       el('span', {}, nameOf(option)),
-      ...(energyOf(state, meal, option) === null ? [] : [el('small', {}, kcalText(energyOf(state, meal, option)))]))))]))];
+      ...(optionKcal(state, meal, option) === null ? [] : [el('small', {}, kcalText(optionKcal(state, meal, option)))]))))]))];
   return el('section', { className: `card meal m-${meal}${isOpen ? ' open' : ''}`, id: `meal-${meal}` },
     el('h2', {}, el('button', { className: 'meal-head', 'aria-expanded': String(isOpen), onclick: toggle },
       el('span', { className: 'badge', 'aria-hidden': 'true' }, selected ? emojiFor(meal, selected) : EMOJI[meal]),
@@ -556,7 +645,7 @@ function renderHoy() {
   const isOpen = openMeal === undefined ? next : openMeal;
   const hasOptions = MEALS.some(m => state.options[m].length);
   const energy = dayKcal(state, day);
-  const showEnergy = energy.counted > 0 || MEALS.some(m => Object.keys(state.energy[m]).length);
+  const showEnergy = energy.counted > 0 || Object.keys(state.foods).length > 0 || MEALS.some(m => Object.keys(state.energy[m]).length);
   const week = n => {
     const target = addDays(day, n * 7);
     goTo(target > today ? today : target);
@@ -664,11 +753,13 @@ function renderPauta() {
   const boxes = {};
   const sections = SECTIONS.map(section => {
     boxes[section] = el('textarea', { className: 'field', 'aria-label': LABELS[section], value: formatBox(state, section) });
-    const count = section === GENERAL ? state.tips[GENERAL].length : state.options[section].length;
+    const [count, noun] = section === GENERAL
+      ? [state.tips[GENERAL].length, 'consejos']
+      : section === FOODS ? [Object.keys(state.foods).length, 'alimentos'] : [state.options[section].length, 'opciones'];
     return el('details', { className: `card edit m-${section}` },
       el('summary', {},
-        el('span', { className: 'badge', style: section === GENERAL ? 'background:var(--primary-tint)' : '', 'aria-hidden': 'true' }, EMOJI[section]),
-        el('span', { className: 'grow' }, LABELS[section], el('small', {}, `${count} ${section === GENERAL ? 'consejos' : 'opciones'}`)),
+        el('span', { className: 'badge', style: section === GENERAL || section === FOODS ? 'background:var(--primary-tint)' : '', 'aria-hidden': 'true' }, EMOJI[section]),
+        el('span', { className: 'grow' }, LABELS[section], el('small', {}, `${count} ${noun}`)),
         el('span', { html: CHEVRON, style: 'display:contents' })),
       boxes[section]);
   });
@@ -686,9 +777,10 @@ function renderPauta() {
       onclick: () => attempt(() => parseBoxes(Object.fromEntries(SECTIONS.map(s => [s, boxes[s].value])))),
     }, 'Guardar cambios'),
     el('p', { className: 'soft help', style: 'margin-top:16px' },
-      'Cada línea es una opción. Debajo, ', el('code', {}, '= 450 kcal'), ' indica sus calorías, ', el('code', {}, '-'), ' un ingrediente, ', el('code', {}, '>'),
+      'Cada línea es una opción. Debajo, ', el('code', {}, '-'), ' indica un ingrediente, ', el('code', {}, '>'),
       ' un paso de preparación y ', el('code', {}, '!'), ' un consejo para toda la comida. Una línea como ',
-      el('code', {}, '# Cena'), ' empieza otra sección. Si una opción empieza por un emoji, se usa como su imagen.'),
+      el('code', {}, '# Cena'), ' empieza otra sección, y en ', el('code', {}, '# Alimentos'), ' cada línea da las kcal por 100 g o ml (',
+      el('code', {}, 'arroz = 350'), ') o por unidad (', el('code', {}, 'huevo = 75 /ud'), '). Tus correcciones de calorías se conservan al pegar una pauta nueva. Si una opción empieza por un emoji, se usa como su imagen.'),
   );
 }
 
