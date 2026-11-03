@@ -101,6 +101,26 @@
   .plate span { position: absolute; inset: 0; display: grid; place-items: center; font: 700 22px var(--display); font-variant-numeric: tabular-nums; }
   .progress strong { display: block; font: 700 19px/1.25 var(--display); }
 
+  /* Water */
+  .water { --w: #1f7fd1; --w-ink: #125f9f; --w-tint: #e1f0fc; padding: 14px; margin-bottom: 12px; }
+  .water-row { --c: #125f9f; --t: #e1f0fc; }
+  @media (prefers-color-scheme: dark) {
+    .water { --w: #5db2f5; --w-ink: #9bd0fa; --w-tint: #18303f; }
+    .water-row { --c: #9bd0fa; --t: #18303f; }
+  }
+  .water-head { display: flex; align-items: center; gap: 12px; }
+  .water-head .badge { background: var(--w-tint); }
+  .water-head b { display: block; font: 700 18px/1.25 var(--display); color: var(--w-ink); }
+  .water-head span span { display: block; font-size: 14px; color: var(--soft); font-variant-numeric: tabular-nums; }
+  .water-bar { height: 10px; margin: 12px 0; border-radius: 5px; background: var(--track); overflow: hidden; }
+  .water-bar i { display: block; height: 100%; border-radius: 5px; background: var(--w); }
+  .water-actions { display: flex; gap: 8px; }
+  .water-actions button { min-height: 48px; border: 0; border-radius: 14px; background: var(--w-tint); color: var(--w-ink); font-weight: 600; font-size: 15px; transition: transform .12s; }
+  .water-actions button:active { transform: scale(.97); }
+  .water-actions button:not(.less) { flex: 1; min-width: 0; padding: 4px 8px; }
+  .water-actions .less { flex: none; width: 48px; font-size: 22px; line-height: 1; }
+  .water-actions .less:disabled { opacity: .4; }
+
   /* Meals */
   .meal { margin-bottom: 12px; overflow: hidden; scroll-margin-top: 12px; }
   .meal h2 { font: inherit; }
@@ -150,6 +170,9 @@
   .field:focus { border-color: var(--primary); outline: 0; }
   textarea.field { min-height: 150px; resize: vertical; display: block; line-height: 1.4; }
   .chosen-note { margin-top: 10px; }
+  .photo { margin-top: 10px; display: grid; gap: 8px; }
+  .photo .secondary { margin: 0; }
+  .photo img { display: block; width: 100%; max-height: 320px; object-fit: cover; border-radius: 14px; }
 
   .banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: var(--warn-bg); color: var(--warn-ink); border-radius: 16px; padding: 12px 14px; margin-bottom: 12px; }
   .banner p { flex: 1 1 180px; font-size: 15px; }
@@ -217,6 +240,11 @@ const KEY = 'comidas-v1';
 const LABELS = { desayuno: 'Desayuno', comida: 'Comida', merienda: 'Merienda', cena: 'Cena', consejos: 'Consejos' };
 const EMOJI = { desayuno: '🍳', comida: '🍲', merienda: '🍎', cena: '🌙', consejos: '💡' };
 const CHEAT_EMOJI = '🍕';
+// shortcut: fixed goal and meals from the current plan, make them editable if a review changes them
+const WATER_GOAL_ML = 2500;
+const PHOTO_MEALS = ['comida', 'cena'];
+const GLASS_ML = 250;
+const BOTTLE_ML = 500;
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 const svg = (body, attrs = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${attrs}>${body}</svg>`;
 const CHEVRON = svg('<path d="m6 9 6 6 6-6"/>', 'class="chev"');
@@ -236,6 +264,7 @@ let enterMeal = null; // the only meal that animates on this render
 let corruptFound = false;
 let state = emptyState();
 const drawnArcs = new Set();
+const photos = new Map(); // held in memory until shared: photos never go into the app's storage
 
 try {
   const loaded = loadState(localStorage.getItem(KEY));
@@ -375,6 +404,73 @@ function goTo(key) {
   render();
 }
 
+function waterCard(day) {
+  const ml = state.water[day] || 0;
+  const change = amount => { addWater(state.water, day, amount); save(); render(); };
+  const percent = Math.min(100, Math.round(ml / WATER_GOAL_ML * 100));
+  return el('section', { className: 'card water', 'aria-label': 'Agua' },
+    el('div', { className: 'water-head' },
+      el('span', { className: 'badge', 'aria-hidden': 'true' }, '💧'),
+      el('span', {},
+        el('b', {}, 'Agua'),
+        el('span', {}, ml >= WATER_GOAL_ML
+          ? `${formatLitres(ml)}. ¡Reto conseguido!`
+          : `${formatLitres(ml)} de ${formatLitres(WATER_GOAL_ML)}`))),
+    el('div', {
+      className: 'water-bar', role: 'progressbar', 'aria-label': 'Progreso de agua',
+      'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(percent),
+    }, el('i', { style: `width:${percent}%` })),
+    el('div', { className: 'water-actions' },
+      el('button', { className: 'less', 'aria-label': `Quitar ${GLASS_ML} ml`, disabled: !ml, onclick: () => change(-GLASS_ML) }, '−'),
+      el('button', { onclick: () => change(GLASS_ML) }, `+ Vaso ${GLASS_ML} ml`),
+      el('button', { onclick: () => change(BOTTLE_ML) }, `+ Botella ${BOTTLE_ML} ml`)));
+}
+
+function clearPhoto(key) {
+  URL.revokeObjectURL(photos.get(key)?.url);
+  photos.delete(key);
+}
+
+async function sendPhoto(key) {
+  const { file } = photos.get(key);
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+    } catch (e) {
+      if (e.name !== 'AbortError') toast('No se ha podido compartir la foto. Inténtalo de nuevo.');
+      return;
+    }
+  } else {
+    el('a', { href: photos.get(key).url, download: file.name }).click();
+  }
+  clearPhoto(key);
+  render();
+  toast('Foto lista. No se guarda en la app.');
+}
+
+function photoBlock(day, meal) {
+  const key = `${day}/${meal}`;
+  const picker = el('input', {
+    type: 'file', accept: 'image/*', hidden: true,
+    onchange: e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      clearPhoto(key);
+      photos.set(key, { file, url: URL.createObjectURL(file) });
+      render();
+    },
+  });
+  const photo = photos.get(key);
+  // Sending takes its own tap because iOS only opens the share sheet right after one.
+  return el('div', { className: 'photo' }, picker, ...(photo
+    ? [
+      el('img', { src: photo.url, alt: `Foto de ${LABELS[meal]}` }),
+      el('button', { className: 'primary', onclick: () => sendPhoto(key) }, 'Enviar foto'),
+      el('button', { className: 'secondary', onclick: () => picker.click() }, 'Cambiar foto'),
+    ]
+    : [el('button', { className: 'secondary', onclick: () => picker.click() }, '📸 Foto para la nutricionista')]));
+}
+
 function chosenBody(day, meal, selected, pick) {
   const cheat = isCheat(selected);
   const lines = cheat ? [] : detailsOf(state.details, meal, selected);
@@ -389,6 +485,7 @@ function chosenBody(day, meal, selected, pick) {
       value: cheatNote(selected),
       oninput: e => { setMeal(state.log, day, meal, cheatText(e.target.value)); save(); },
     })] : []),
+    ...(PHOTO_MEALS.includes(meal) ? [photoBlock(day, meal)] : []),
     ...(lines.length ? [el('section', { className: 'block' }, el('h3', {}, 'Ingredientes'),
       el('ul', { className: 'ingredients' }, ...lines.map(line => {
         const { qty, name } = splitQuantity(line);
@@ -472,7 +569,7 @@ function renderHoy() {
         el('em', { 'aria-hidden': 'true' }, '🍽️'),
         el('p', { className: 'soft' }, 'Añade tu pauta para ver aquí tus comidas de cada día.'),
         el('button', { className: 'primary', onclick: () => { tab = 'pauta'; render(); } }, 'Añadir pauta'))]),
-    ...(hasOptions || Object.keys(log).length ? MEALS.map(meal => mealCard(day, meal, isOpen === meal)) : []),
+    ...(hasOptions || Object.keys(log).length ? [waterCard(day), ...MEALS.map(meal => mealCard(day, meal, isOpen === meal))] : []),
   );
   enterMeal = null;
 }
@@ -482,7 +579,7 @@ function renderHistorial() {
     type: 'file', hidden: true,
     onchange: e => { if (e.target.files[0]) restoreBackup(e.target.files[0]); e.target.value = ''; },
   });
-  const days = Object.keys(state.log).sort().reverse();
+  const days = [...new Set([...Object.keys(state.log), ...Object.keys(state.water)])].sort().reverse();
   app.append(
     el('h1', {}, 'Historial'),
     el('h2', { className: 'section-title' }, '🛟 Copia de seguridad'),
@@ -499,9 +596,12 @@ function renderHistorial() {
       el('p', { className: 'soft', style: 'margin:0' }, 'Aquí verás lo que vayas marcando cada día.'))]),
     ...days.map(day => el('article', { className: 'card day-card' },
       el('header', {}, el('h3', {}, longDate(day)), pips(day)),
-      ...MEALS.filter(m => state.log[day][m]).map(m => el('div', { className: `day-row m-${m}` },
-        el('em', { 'aria-hidden': 'true' }, emojiFor(m, state.log[day][m])),
-        el('div', {}, el('small', {}, LABELS[m]), nameOf(state.log[day][m])))))),
+      ...MEALS.filter(m => dayLog(day)[m]).map(m => el('div', { className: `day-row m-${m}` },
+        el('em', { 'aria-hidden': 'true' }, emojiFor(m, dayLog(day)[m])),
+        el('div', {}, el('small', {}, LABELS[m]), nameOf(dayLog(day)[m])))),
+      ...(state.water[day] ? [el('div', { className: 'day-row water-row' },
+        el('em', { 'aria-hidden': 'true' }, '💧'),
+        el('div', {}, el('small', {}, 'Agua'), formatLitres(state.water[day])))] : []))),
   );
 }
 

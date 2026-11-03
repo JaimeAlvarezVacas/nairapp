@@ -8,7 +8,7 @@ const emptyOptions = () => ({ desayuno: [], comida: [], merienda: [], cena: [] }
 const emptyDetails = () => ({ desayuno: {}, comida: {}, merienda: {}, cena: {} });
 const emptyTips = () => ({ desayuno: [], comida: [], merienda: [], cena: [], consejos: [] });
 const emptyState = () => ({
-  options: emptyOptions(), details: emptyDetails(), prep: emptyDetails(), tips: emptyTips(), log: {}, lastBackup: null,
+  options: emptyOptions(), details: emptyDetails(), prep: emptyDetails(), tips: emptyTips(), log: {}, water: {}, lastBackup: null,
 });
 
 // Local time on purpose: toISOString() would put a late dinner on the wrong day.
@@ -42,6 +42,14 @@ function setMeal(log, key, meal, text) {
     if (!Object.keys(log[key]).length) delete log[key];
   }
 }
+
+function addWater(water, key, ml) {
+  const total = Math.max(0, (water[key] || 0) + ml);
+  if (total) water[key] = total;
+  else delete water[key];
+}
+
+const formatLitres = ml => `${(ml / 1000).toLocaleString('es-ES', { maximumFractionDigits: 2 })} L`;
 
 const isCheat = text => text === CHEAT || (text || '').startsWith(CHEAT + ': ');
 const cheatText = note => (note.trim() ? `${CHEAT}: ${note.trim()}` : CHEAT);
@@ -144,13 +152,17 @@ function isValidDetails(details) {
 
 const isValidTips = tips => tips && typeof tips === 'object' && SECTIONS.every(s => isTextList(tips[s]));
 
-// details, prep and tips are optional: data saved by earlier versions doesn't have them.
+const isValidWater = water => water && typeof water === 'object' && Object.entries(water).every(([key, ml]) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(key) && Number.isInteger(ml) && ml > 0);
+
+// details, prep, tips and water are optional: data saved by earlier versions doesn't have them.
 function isValidData(d) {
   if (!d || typeof d.options !== 'object' || !d.options || typeof d.log !== 'object' || !d.log) return false;
   if (!MEALS.every(m => isTextList(d.options[m]))) return false;
   if (d.details !== undefined && !isValidDetails(d.details)) return false;
   if (d.prep !== undefined && !isValidDetails(d.prep)) return false;
   if (d.tips !== undefined && !isValidTips(d.tips)) return false;
+  if (d.water !== undefined && !isValidWater(d.water)) return false;
   return Object.entries(d.log).every(([key, day]) =>
     /^\d{4}-\d{2}-\d{2}$/.test(key) && day && typeof day === 'object' &&
     Object.entries(day).every(([meal, text]) => MEALS.includes(meal) && typeof text === 'string' && text));
@@ -177,6 +189,7 @@ const makeBackup = (state, now) => ({
   prep: state.prep,
   tips: state.tips,
   log: state.log,
+  water: state.water,
 });
 
 function parseBackup(text) {
@@ -212,6 +225,7 @@ function mergeBackup(state, backup) {
       prep: hasOptions ? state.prep : backup.prep || emptyDetails(),
       tips: hasOptions ? state.tips : backup.tips || emptyTips(),
       log,
+      water: { ...backup.water, ...state.water },
       lastBackup: newer ? backup.createdAt : state.lastBackup,
     },
     added,
@@ -219,13 +233,13 @@ function mergeBackup(state, backup) {
 }
 
 function needsBackup(state, now) {
-  if (!Object.keys(state.log).length) return false;
+  if (!Object.keys(state.log).length && !Object.keys(state.water).length) return false;
   return !state.lastBackup || now - Date.parse(state.lastBackup) > BACKUP_EVERY_MS;
 }
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    MEALS, GENERAL, SECTIONS, CHEAT, emptyState, dateKey, addDays, isWeekend, setMeal, isCheat, cheatText, cheatNote,
+    MEALS, GENERAL, SECTIONS, CHEAT, emptyState, dateKey, addDays, isWeekend, setMeal, addWater, formatLitres, isCheat, cheatText, cheatNote,
     parseBoxes, applyPaste, splitEmoji, splitQuantity, detailsOf, formatBox, loadState, makeBackup, parseBackup, mergeBackup, needsBackup,
   };
 }

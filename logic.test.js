@@ -244,3 +244,47 @@ test('splitQuantity separa la cantidad del ingrediente', () => {
   assert.deepEqual(l.splitQuantity('Canela al gusto'), { qty: '', name: 'Canela al gusto' });
   assert.deepEqual(l.splitQuantity('3 gambas'), { qty: '3', name: 'gambas' });
 });
+
+test('addWater suma, resta sin bajar de cero y no deja días vacíos', () => {
+  const water = {};
+  l.addWater(water, '2026-11-03', 250);
+  l.addWater(water, '2026-11-03', 500);
+  assert.equal(water['2026-11-03'], 750);
+  l.addWater(water, '2026-11-03', -250);
+  assert.equal(water['2026-11-03'], 500);
+  l.addWater(water, '2026-11-03', -1000);
+  assert.deepEqual(water, {});
+});
+
+test('formatLitres usa formato español', () => {
+  assert.equal(l.formatLitres(0), '0 L');
+  assert.equal(l.formatLitres(250), '0,25 L');
+  assert.equal(l.formatLitres(1500), '1,5 L');
+  assert.equal(l.formatLitres(2500), '2,5 L');
+});
+
+test('la copia guarda el agua y al restaurar gana lo que hay en el móvil', () => {
+  const phone = l.emptyState();
+  phone.water = { '2026-11-03': 500 };
+  const other = l.emptyState();
+  other.water = { '2026-11-03': 2000, '2026-11-01': 1000 };
+  const back = l.parseBackup(JSON.stringify(l.makeBackup(other, new Date('2026-11-03T20:00:00Z'))));
+  assert.deepEqual(l.mergeBackup(phone, back).state.water, { '2026-11-03': 500, '2026-11-01': 1000 });
+  assert.deepEqual(phone.water, { '2026-11-03': 500 });
+});
+
+test('copias y datos antiguos sin agua siguen funcionando, y el agua inválida se rechaza', () => {
+  const { options, log } = l.emptyState();
+  assert.deepEqual(l.loadState(JSON.stringify({ options, log })).state.water, {});
+  const old = { app: 'comidas', v: 1, createdAt: '2026-11-03T00:00:00Z', options, log };
+  assert.deepEqual(l.mergeBackup(l.emptyState(), l.parseBackup(JSON.stringify(old))).state.water, {});
+  for (const water of [{ ayer: 250 }, { '2026-11-03': '250' }, { '2026-11-03': -250 }, { '2026-11-03': 1.5 }, 'mucha']) {
+    assert.throws(() => l.parseBackup(JSON.stringify({ ...old, water })), /copia válida/);
+  }
+});
+
+test('needsBackup también protege el agua', () => {
+  const state = l.emptyState();
+  state.water = { '2026-11-03': 250 };
+  assert.equal(l.needsBackup(state, new Date('2026-11-03T12:00:00Z')), true);
+});
