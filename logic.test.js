@@ -288,3 +288,78 @@ test('needsBackup también protege el agua', () => {
   state.water = { '2026-11-03': 250 };
   assert.equal(l.needsBackup(state, new Date('2026-11-03T12:00:00Z')), true);
 });
+
+test('parseBoxes y formatBox conservan las calorías', () => {
+  const r = l.parseBoxes({ cena: 'Sopa\n= 320 kcal\n- 1 unidad de A\nPescado\n=410\nSin datos' });
+  assert.deepEqual(r.energy.cena, { Sopa: 320, Pescado: 410 });
+  const state = { ...l.emptyState(), ...r };
+  assert.equal(l.formatBox(state, 'cena'), 'Sopa\n= 320 kcal\n- 1 unidad de A\nPescado\n= 410 kcal\nSin datos');
+  assert.deepEqual(l.parseBoxes({ cena: l.formatBox(state, 'cena') }).energy, r.energy);
+});
+
+test('unas calorías mal escritas no se aceptan', () => {
+  assert.throws(() => l.parseBoxes({ cena: 'Sopa\n= mucho' }), /calorías/);
+  assert.throws(() => l.parseBoxes({ cena: '= 300 kcal' }), /calorías/);
+  assert.throws(() => l.parseBoxes({ cena: 'Sopa\n= -5 kcal' }), /calorías/);
+});
+
+test('el total del día suma lo marcado y cuenta lo que no tiene calorías', () => {
+  const state = { ...l.emptyState(), ...l.parseBoxes({ comida: 'Pollo\n= 500', cena: 'Sopa\n= 300' }) };
+  const day = '2026-11-07';
+  assert.deepEqual(l.dayKcal(state, day), { total: 0, counted: 0, missing: 0 });
+  l.setMeal(state.log, day, 'comida', 'Pollo');
+  l.setMeal(state.log, day, 'cena', 'Cheat meal: pizza');
+  assert.equal(l.mealKcal(state, day, 'comida'), 500);
+  assert.equal(l.mealKcal(state, day, 'cena'), null);
+  assert.equal(l.mealKcal(state, day, 'desayuno'), null);
+  assert.deepEqual(l.dayKcal(state, day), { total: 500, counted: 1, missing: 1 });
+  l.setMeal(state.log, day, 'cena', 'Sopa');
+  assert.deepEqual(l.dayKcal(state, day), { total: 800, counted: 2, missing: 0 });
+});
+
+test('una opción con 0 kcal cuenta como dato y no como falta', () => {
+  const state = { ...l.emptyState(), ...l.parseBoxes({ cena: 'Infusión\n= 0' }) };
+  l.setMeal(state.log, '2026-11-03', 'cena', 'Infusión');
+  assert.deepEqual(l.dayKcal(state, '2026-11-03'), { total: 0, counted: 1, missing: 0 });
+});
+
+test('una pauta nueva no cambia las calorías de los días pasados', () => {
+  const state = { ...l.emptyState(), ...l.parseBoxes({ cena: 'Sopa\n= 300' }) };
+  l.setMeal(state.log, '2026-11-03', 'cena', 'Sopa');
+  l.setMeal(state.log, '2026-11-04', 'cena', 'Sopa');
+  l.setKcal(state.kcal, '2026-11-04', 'cena', 280);
+  l.freezeKcal(state);
+  Object.assign(state, l.parseBoxes({ cena: 'Sopa\n= 999\nOtra\n= 100' }));
+  assert.equal(l.dayKcal(state, '2026-11-03').total, 300);
+  assert.equal(l.dayKcal(state, '2026-11-04').total, 280);
+});
+
+test('setKcal limpia al quitar y la copia restaura solo las calorías de lo restaurado', () => {
+  const kcal = {};
+  l.setKcal(kcal, '2026-11-03', 'cena', 300);
+  l.setKcal(kcal, '2026-11-03', 'cena', null);
+  assert.deepEqual(kcal, {});
+
+  const other = { ...l.emptyState(), ...l.parseBoxes({ cena: 'Vieja\n= 700' }) };
+  other.log = { '2026-11-03': { cena: 'Vieja' }, '2026-11-01': { cena: 'Vieja' } };
+  other.kcal = { '2026-11-03': { cena: 700 }, '2026-11-01': { cena: 700 } };
+  const back = l.parseBackup(JSON.stringify(l.makeBackup(other, new Date('2026-11-03T20:00:00Z'))));
+  const phone = { ...l.emptyState(), ...l.parseBoxes({ cena: 'Nueva\n= 200' }) };
+  phone.log = { '2026-11-03': { cena: 'Nueva' } };
+  phone.kcal = { '2026-11-03': { cena: 200 } };
+  const { state } = l.mergeBackup(phone, back);
+  assert.deepEqual(state.kcal, { '2026-11-03': { cena: 200 }, '2026-11-01': { cena: 700 } });
+  assert.deepEqual(state.energy.cena, { Nueva: 200 });
+  assert.deepEqual(l.mergeBackup(l.emptyState(), back).state.energy.cena, { Vieja: 700 });
+});
+
+test('datos sin calorías siguen funcionando y las calorías inválidas se rechazan', () => {
+  const { options, log } = l.emptyState();
+  const loaded = l.loadState(JSON.stringify({ options, log })).state;
+  assert.deepEqual(loaded.kcal, {});
+  assert.equal(l.energyOf(loaded, 'cena', 'Sopa'), null);
+  const old = { app: 'comidas', v: 1, createdAt: '2026-11-03T00:00:00Z', options, log };
+  for (const bad of [{ kcal: { ayer: {} } }, { kcal: { '2026-11-03': { snack: 1 } } }, { kcal: { '2026-11-03': { cena: -1 } } }, { energy: { cena: {} } }, { energy: { desayuno: {}, comida: {}, merienda: {}, cena: { Sopa: '300' } } }]) {
+    assert.throws(() => l.parseBackup(JSON.stringify({ ...old, ...bad })), /copia válida/);
+  }
+});

@@ -100,6 +100,9 @@
   @keyframes draw { from { stroke-dasharray: 0 100; } }
   .plate span { position: absolute; inset: 0; display: grid; place-items: center; font: 700 22px var(--display); font-variant-numeric: tabular-nums; }
   .progress strong { display: block; font: 700 19px/1.25 var(--display); }
+  .day-kcal { margin-top: 6px; font-size: 15px; }
+  .day-kcal b { font: 700 17px/1.2 var(--display); font-variant-numeric: tabular-nums; }
+  .estimate { margin: 4px 4px 0; font-size: 13px; }
 
   /* Water */
   .water { --w: #1f7fd1; --w-ink: #125f9f; --w-tint: #e1f0fc; padding: 14px; margin-bottom: 12px; }
@@ -133,6 +136,7 @@
   .meal-text { flex: 1; min-width: 0; }
   .meal-text b { display: block; font: 700 18px/1.25 var(--display); color: var(--c); }
   .meal-text span { display: block; font-size: 14px; color: var(--soft); overflow-wrap: anywhere; }
+  .meal-text .meal-kcal { font-weight: 600; color: var(--c); font-variant-numeric: tabular-nums; }
   .done { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: var(--on-primary); display: grid; place-items: center; }
   .chev { flex: none; width: 18px; height: 18px; color: var(--soft); transition: transform .2s; }
   .open .chev { transform: rotate(180deg); }
@@ -147,6 +151,7 @@
     overflow-wrap: anywhere; transition: transform .12s;
   }
   .tile em { font-style: normal; font-size: 30px; line-height: 1; }
+  .tile small { margin-top: auto; font-size: 13px; font-weight: 600; color: var(--c); font-variant-numeric: tabular-nums; }
   .tile.cheat { grid-column: 1 / -1; min-height: 60px; flex-direction: row; align-items: center; background: none; border: 1.5px dashed var(--r); }
 
   .chosen-head { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 16px; background: var(--t); }
@@ -186,6 +191,7 @@
   .day-card { padding: 14px 16px; margin-bottom: 10px; }
   .day-card header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
   .day-card h3 { flex: 1; font: 700 16px/1.3 var(--display); }
+  .day-total { margin: -4px 0 8px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
   .day-row { display: flex; gap: 10px; padding: 6px 0; align-items: flex-start; }
   .day-row em { flex: none; width: 30px; height: 30px; border-radius: 10px; background: var(--t); display: grid; place-items: center; font-style: normal; font-size: 16px; }
   .day-row div { min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
@@ -310,6 +316,8 @@ const longDate = key => keyToDate(key).toLocaleDateString('es-ES', { weekday: 'l
 const dayLog = day => state.log[day] || {};
 const emojiFor = (meal, text) => (isCheat(text) ? CHEAT_EMOJI : splitEmoji(text).emoji || EMOJI[meal]);
 const nameOf = text => splitEmoji(text).name;
+const kcalText = value => `≈ ${value} kcal`;
+const dayTotalText = ({ total, missing }) => `${kcalText(total)}${missing ? ` + ${missing} sin contar` : ''}`;
 
 async function saveBackup() {
   const now = new Date();
@@ -505,6 +513,7 @@ function mealCard(day, meal, isOpen) {
   const selected = dayLog(day)[meal];
   const pick = text => {
     setMeal(state.log, day, meal, text);
+    setKcal(state.kcal, day, meal, text ? energyOf(state, meal, text) : null);
     save();
     openMeal = meal;
     enterMeal = meal;
@@ -527,11 +536,13 @@ function mealCard(day, meal, isOpen) {
         className: `tile${option === CHEAT ? ' cheat' : ''}`, onclick: () => pick(option),
       },
       el('em', { 'aria-hidden': 'true' }, emojiFor(meal, option)),
-      el('span', {}, nameOf(option)))))]))];
+      el('span', {}, nameOf(option)),
+      ...(energyOf(state, meal, option) === null ? [] : [el('small', {}, kcalText(energyOf(state, meal, option)))]))))]))];
   return el('section', { className: `card meal m-${meal}${isOpen ? ' open' : ''}`, id: `meal-${meal}` },
     el('h2', {}, el('button', { className: 'meal-head', 'aria-expanded': String(isOpen), onclick: toggle },
       el('span', { className: 'badge', 'aria-hidden': 'true' }, selected ? emojiFor(meal, selected) : EMOJI[meal]),
-      el('span', { className: 'meal-text' }, el('b', {}, LABELS[meal]), el('span', {}, subtitle)),
+      el('span', { className: 'meal-text' }, el('b', {}, LABELS[meal]), el('span', {}, subtitle),
+        ...(mealKcal(state, day, meal) === null ? [] : [el('span', { className: 'meal-kcal' }, kcalText(mealKcal(state, day, meal)))])),
       ...(selected ? [el('span', { className: 'done', html: CHECK })] : []),
       el('span', { html: CHEVRON, style: 'display:contents' }))),
     ...body);
@@ -544,6 +555,8 @@ function renderHoy() {
   const next = MEALS.find(m => !log[m]);
   const isOpen = openMeal === undefined ? next : openMeal;
   const hasOptions = MEALS.some(m => state.options[m].length);
+  const energy = dayKcal(state, day);
+  const showEnergy = energy.counted > 0 || MEALS.some(m => Object.keys(state.energy[m]).length);
   const week = n => {
     const target = addDays(day, n * 7);
     goTo(target > today ? today : target);
@@ -564,12 +577,14 @@ function renderHoy() {
       ? [el('div', { className: 'card progress' }, plate(day),
         el('div', {},
           el('strong', {}, next ? `Siguiente: ${LABELS[next].toLowerCase()}` : '¡Día completo! 🎉'),
-          el('p', { className: 'soft' }, next ? `${EMOJI[next]} Elige lo que más te apetezca` : 'Has marcado las cuatro comidas')))]
+          el('p', { className: 'soft' }, next ? `${EMOJI[next]} Elige lo que más te apetezca` : 'Has marcado las cuatro comidas'),
+          ...(showEnergy ? [el('p', { className: 'day-kcal' }, '🔥 ', el('b', {}, dayTotalText(energy)))] : [])))]
       : [el('div', { className: 'card empty' },
         el('em', { 'aria-hidden': 'true' }, '🍽️'),
         el('p', { className: 'soft' }, 'Añade tu pauta para ver aquí tus comidas de cada día.'),
         el('button', { className: 'primary', onclick: () => { tab = 'pauta'; render(); } }, 'Añadir pauta'))]),
     ...(hasOptions || Object.keys(log).length ? [waterCard(day), ...MEALS.map(meal => mealCard(day, meal, isOpen === meal))] : []),
+    ...(showEnergy ? [el('p', { className: 'soft estimate' }, 'Las calorías son una estimación según las cantidades de tu pauta.')] : []),
   );
   enterMeal = null;
 }
@@ -596,9 +611,12 @@ function renderHistorial() {
       el('p', { className: 'soft', style: 'margin:0' }, 'Aquí verás lo que vayas marcando cada día.'))]),
     ...days.map(day => el('article', { className: 'card day-card' },
       el('header', {}, el('h3', {}, longDate(day)), pips(day)),
+      ...(dayKcal(state, day).counted ? [el('p', { className: 'day-total' }, `🔥 ${dayTotalText(dayKcal(state, day))}`)] : []),
       ...MEALS.filter(m => dayLog(day)[m]).map(m => el('div', { className: `day-row m-${m}` },
         el('em', { 'aria-hidden': 'true' }, emojiFor(m, dayLog(day)[m])),
-        el('div', {}, el('small', {}, LABELS[m]), nameOf(dayLog(day)[m])))),
+        el('div', {},
+          el('small', {}, mealKcal(state, day, m) === null ? LABELS[m] : `${LABELS[m]}, ${kcalText(mealKcal(state, day, m))}`),
+          nameOf(dayLog(day)[m])))),
       ...(state.water[day] ? [el('div', { className: 'day-row water-row' },
         el('em', { 'aria-hidden': 'true' }, '💧'),
         el('div', {}, el('small', {}, 'Agua'), formatLitres(state.water[day])))] : []))),
@@ -625,6 +643,7 @@ function renderConsejos() {
 
 function renderPauta() {
   const finish = (changes, message) => {
+    freezeKcal(state);
     Object.assign(state, changes);
     save();
     tab = 'hoy';
@@ -667,7 +686,7 @@ function renderPauta() {
       onclick: () => attempt(() => parseBoxes(Object.fromEntries(SECTIONS.map(s => [s, boxes[s].value])))),
     }, 'Guardar cambios'),
     el('p', { className: 'soft help', style: 'margin-top:16px' },
-      'Cada línea es una opción. Debajo, ', el('code', {}, '-'), ' indica un ingrediente, ', el('code', {}, '>'),
+      'Cada línea es una opción. Debajo, ', el('code', {}, '= 450 kcal'), ' indica sus calorías, ', el('code', {}, '-'), ' un ingrediente, ', el('code', {}, '>'),
       ' un paso de preparación y ', el('code', {}, '!'), ' un consejo para toda la comida. Una línea como ',
       el('code', {}, '# Cena'), ' empieza otra sección. Si una opción empieza por un emoji, se usa como su imagen.'),
   );

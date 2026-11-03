@@ -8,7 +8,7 @@ const emptyOptions = () => ({ desayuno: [], comida: [], merienda: [], cena: [] }
 const emptyDetails = () => ({ desayuno: {}, comida: {}, merienda: {}, cena: {} });
 const emptyTips = () => ({ desayuno: [], comida: [], merienda: [], cena: [], consejos: [] });
 const emptyState = () => ({
-  options: emptyOptions(), details: emptyDetails(), prep: emptyDetails(), tips: emptyTips(), log: {}, water: {}, lastBackup: null,
+  options: emptyOptions(), details: emptyDetails(), prep: emptyDetails(), tips: emptyTips(), energy: emptyDetails(), log: {}, kcal: {}, water: {}, lastBackup: null,
 });
 
 // Local time on purpose: toISOString() would put a late dinner on the wrong day.
@@ -43,6 +43,38 @@ function setMeal(log, key, meal, text) {
   }
 }
 
+// The kcal of a choice is kept with the day, so a later plan can't change past totals.
+function setKcal(kcal, key, meal, value) {
+  if (value !== null && value !== undefined) {
+    kcal[key] = kcal[key] || {};
+    kcal[key][meal] = value;
+  } else if (kcal[key]) {
+    delete kcal[key][meal];
+    if (!Object.keys(kcal[key]).length) delete kcal[key];
+  }
+}
+
+const energyOf = (state, meal, name) => (Object.hasOwn(state.energy[meal], name) ? state.energy[meal][name] : null);
+
+function mealKcal(state, key, meal) {
+  const chosen = state.log[key]?.[meal];
+  if (!chosen) return null;
+  return state.kcal[key]?.[meal] ?? energyOf(state, meal, chosen);
+}
+
+// missing counts marked meals without a figure, such as a cheat meal.
+function dayKcal(state, key) {
+  const marked = MEALS.filter(m => state.log[key]?.[m]);
+  const known = marked.map(m => mealKcal(state, key, m)).filter(v => v !== null);
+  return { total: known.reduce((a, b) => a + b, 0), counted: known.length, missing: marked.length - known.length };
+}
+
+function freezeKcal(state) {
+  for (const [key, day] of Object.entries(state.log)) {
+    for (const meal of Object.keys(day)) setKcal(state.kcal, key, meal, mealKcal(state, key, meal));
+  }
+}
+
 function addWater(water, key, ml) {
   const total = Math.max(0, (water[key] || 0) + ml);
   if (total) water[key] = total;
@@ -58,7 +90,7 @@ const cheatNote = text => (text || '').slice(CHEAT.length + 2);
 const normalize = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 // Each box holds one option per line. Below an option, "- " lines are ingredients and
-// "> " lines are preparation steps; "! " lines are tips for the whole meal.
+// "> " lines are preparation steps and "= 450 kcal" is its energy; "! " lines are tips for the whole meal.
 // A "# Comida" line sends what follows to that section, so the whole plan can be pasted
 // into one box and replace the sections it names.
 function parseBoxes(boxes) {
@@ -83,17 +115,21 @@ function parseBoxes(boxes) {
       const text = line.replace(/^[-•*>!]\s*/, '');
       if (current === GENERAL || line[0] === '!') {
         section.tips.push(text);
+      } else if (line[0] === '=') {
+        const energy = line.match(/^=\s*(\d+)\s*(?:kcal)?$/i);
+        if (!energy || !item) throw new Error(`No entiendo las calorías "${line}"`);
+        item.kcal = Number(energy[1]);
       } else if ('-•*'.includes(line[0]) && item) {
         item.ingredients.push(text);
       } else if (line[0] === '>' && item) {
         item.prep.push(text);
       } else {
-        if (!section.items.has(text)) section.items.set(text, { ingredients: [], prep: [] });
+        if (!section.items.has(text)) section.items.set(text, { ingredients: [], prep: [], kcal: null });
         item = section.items.get(text);
       }
     }
   }
-  const result = { options: emptyOptions(), details: emptyDetails(), prep: emptyDetails(), tips: emptyTips() };
+  const result = { options: emptyOptions(), details: emptyDetails(), prep: emptyDetails(), tips: emptyTips(), energy: emptyDetails() };
   for (const box of SECTIONS) {
     const section = named[box] || plain[box];
     if (!section) continue;
@@ -103,6 +139,7 @@ function parseBoxes(boxes) {
     result.options[box] = entries.map(([name]) => name);
     result.details[box] = Object.fromEntries(entries.filter(([, i]) => i.ingredients.length).map(([n, i]) => [n, i.ingredients]));
     result.prep[box] = Object.fromEntries(entries.filter(([, i]) => i.prep.length).map(([n, i]) => [n, i.prep]));
+    result.energy[box] = Object.fromEntries(entries.filter(([, i]) => i.kcal !== null).map(([n, i]) => [n, i.kcal]));
   }
   return result;
 }
@@ -137,6 +174,7 @@ function formatBox(state, box) {
     ...state.tips[box].map(tip => `! ${tip}`),
     ...state.options[box].flatMap(name => [
       name,
+      ...(energyOf(state, box, name) === null ? [] : [`= ${energyOf(state, box, name)} kcal`]),
       ...detailsOf(state.details, box, name).map(line => `- ${line}`),
       ...detailsOf(state.prep, box, name).map(line => `> ${line}`),
     ]),
@@ -155,7 +193,14 @@ const isValidTips = tips => tips && typeof tips === 'object' && SECTIONS.every(s
 const isValidWater = water => water && typeof water === 'object' && Object.entries(water).every(([key, ml]) =>
   /^\d{4}-\d{2}-\d{2}$/.test(key) && Number.isInteger(ml) && ml > 0);
 
-// details, prep, tips and water are optional: data saved by earlier versions doesn't have them.
+const isKcal = v => Number.isInteger(v) && v >= 0;
+const isValidEnergy = energy => energy && typeof energy === 'object' && MEALS.every(m =>
+  energy[m] && typeof energy[m] === 'object' && Object.values(energy[m]).every(isKcal));
+const isValidKcal = kcal => kcal && typeof kcal === 'object' && Object.entries(kcal).every(([key, day]) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(key) && day && typeof day === 'object' &&
+  Object.entries(day).every(([meal, v]) => MEALS.includes(meal) && isKcal(v)));
+
+// details, prep, tips, energy, kcal and water are optional: data saved by earlier versions doesn't have them.
 function isValidData(d) {
   if (!d || typeof d.options !== 'object' || !d.options || typeof d.log !== 'object' || !d.log) return false;
   if (!MEALS.every(m => isTextList(d.options[m]))) return false;
@@ -163,6 +208,8 @@ function isValidData(d) {
   if (d.prep !== undefined && !isValidDetails(d.prep)) return false;
   if (d.tips !== undefined && !isValidTips(d.tips)) return false;
   if (d.water !== undefined && !isValidWater(d.water)) return false;
+  if (d.energy !== undefined && !isValidEnergy(d.energy)) return false;
+  if (d.kcal !== undefined && !isValidKcal(d.kcal)) return false;
   return Object.entries(d.log).every(([key, day]) =>
     /^\d{4}-\d{2}-\d{2}$/.test(key) && day && typeof day === 'object' &&
     Object.entries(day).every(([meal, text]) => MEALS.includes(meal) && typeof text === 'string' && text));
@@ -188,7 +235,9 @@ const makeBackup = (state, now) => ({
   details: state.details,
   prep: state.prep,
   tips: state.tips,
+  energy: state.energy,
   log: state.log,
+  kcal: state.kcal,
   water: state.water,
 });
 
@@ -208,11 +257,13 @@ function parseBackup(text) {
 // Restoring never deletes: on a conflict what is already on the phone wins.
 function mergeBackup(state, backup) {
   const log = structuredClone(state.log);
+  const kcal = structuredClone(state.kcal);
   let added = 0;
   for (const [key, day] of Object.entries(backup.log)) {
     for (const [meal, text] of Object.entries(day)) {
       if (log[key]?.[meal]) continue;
       setMeal(log, key, meal, text);
+      setKcal(kcal, key, meal, backup.kcal?.[key]?.[meal]);
       added++;
     }
   }
@@ -224,7 +275,9 @@ function mergeBackup(state, backup) {
       details: hasOptions ? state.details : backup.details || emptyDetails(),
       prep: hasOptions ? state.prep : backup.prep || emptyDetails(),
       tips: hasOptions ? state.tips : backup.tips || emptyTips(),
+      energy: hasOptions ? state.energy : backup.energy || emptyDetails(),
       log,
+      kcal,
       water: { ...backup.water, ...state.water },
       lastBackup: newer ? backup.createdAt : state.lastBackup,
     },
@@ -239,7 +292,7 @@ function needsBackup(state, now) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    MEALS, GENERAL, SECTIONS, CHEAT, emptyState, dateKey, addDays, isWeekend, setMeal, addWater, formatLitres, isCheat, cheatText, cheatNote,
+    MEALS, GENERAL, SECTIONS, CHEAT, emptyState, dateKey, addDays, isWeekend, setMeal, setKcal, energyOf, mealKcal, dayKcal, freezeKcal, addWater, formatLitres, isCheat, cheatText, cheatNote,
     parseBoxes, applyPaste, splitEmoji, splitQuantity, detailsOf, formatBox, loadState, makeBackup, parseBackup, mergeBackup, needsBackup,
   };
 }
