@@ -211,3 +211,36 @@ test('needsBackup avisa a los 7 días, y no si no hay nada que guardar', () => {
   state.lastBackup = '2026-11-03T11:00:00Z';
   assert.equal(l.needsBackup(state, now), true);
 });
+
+test('pegar una pauta reemplaza solo las secciones que nombra', () => {
+  const state = { ...l.emptyState(), ...l.parseBoxes({ desayuno: 'Vieja\n- 1 unidad de A', cena: 'Sopa', consejos: 'Beber agua' }) };
+  const r = l.applyPaste(state, '\n# Desayuno\nNueva\n# Comida\nPollo');
+  assert.deepEqual(r.options.desayuno, ['Nueva']);
+  assert.deepEqual(r.details.desayuno, {});
+  assert.deepEqual(r.options.comida, ['Pollo']);
+  assert.deepEqual(r.options.cena, ['Sopa']);
+  assert.deepEqual(r.tips.consejos, ['Beber agua']);
+});
+
+test('pegar una pauta sin cabeceras válidas no se acepta', () => {
+  assert.throws(() => l.applyPaste(l.emptyState(), 'Avena\nTostada'), /# Desayuno/);
+  assert.throws(() => l.applyPaste(l.emptyState(), '# Snack\nNueces'), /Snack/);
+  assert.throws(() => l.applyPaste(l.emptyState(), '# Cena\nSopa\n# Snack\nNueces'), /Snack/);
+});
+
+test('splitEmoji separa el emoji del nombre', () => {
+  assert.deepEqual(l.splitEmoji('🍲 Sopa de la casa'), { emoji: '🍲', name: 'Sopa de la casa' });
+  assert.deepEqual(l.splitEmoji('🌶️Picante'), { emoji: '🌶️', name: 'Picante' });
+  assert.deepEqual(l.splitEmoji('🧑‍🍳 Receta'), { emoji: '🧑‍🍳', name: 'Receta' });
+  assert.deepEqual(l.splitEmoji('Sopa'), { emoji: '', name: 'Sopa' });
+  assert.deepEqual(l.splitEmoji('2 huevos'), { emoji: '', name: '2 huevos' });
+});
+
+test('splitQuantity separa la cantidad del ingrediente', () => {
+  assert.deepEqual(l.splitQuantity('40 g de avena'), { qty: '40 g', name: 'avena' });
+  assert.deepEqual(l.splitQuantity('100 ml de leche'), { qty: '100 ml', name: 'leche' });
+  assert.deepEqual(l.splitQuantity('1 huevo + 100 g de claras'), { qty: '1', name: 'huevo + 100 g de claras' });
+  assert.deepEqual(l.splitQuantity('2,5 kg de patata'), { qty: '2,5 kg', name: 'patata' });
+  assert.deepEqual(l.splitQuantity('Canela al gusto'), { qty: '', name: 'Canela al gusto' });
+  assert.deepEqual(l.splitQuantity('3 gambas'), { qty: '3', name: 'gambas' });
+});

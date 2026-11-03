@@ -99,6 +99,28 @@ function parseBoxes(boxes) {
   return result;
 }
 
+// A plan pasted on its own replaces only the sections it names. Its text takes the place of
+// the first named box because a box with headers would otherwise keep that box's old lines.
+function applyPaste(state, text) {
+  const header = text.match(/^\s*#+\s*(.+?):?\s*$/m);
+  if (!header) throw new Error('Falta una línea de sección, como # Desayuno');
+  const first = normalize(header[1]);
+  if (!SECTIONS.includes(first)) throw new Error(`No reconozco la cabecera "${header[0].trim()}"`);
+  const boxes = Object.fromEntries(SECTIONS.map(s => [s, formatBox(state, s)]));
+  boxes[first] = text;
+  return parseBoxes(boxes);
+}
+
+function splitEmoji(text) {
+  const m = text.match(/^(\p{Extended_Pictographic}(?:️|‍\p{Extended_Pictographic})*)\s*(.*)$/u);
+  return m ? { emoji: m[1], name: m[2] } : { emoji: '', name: text };
+}
+
+function splitQuantity(line) {
+  const m = line.match(/^(\d+(?:[.,]\d+)?(?:\s?(?:kg|gr|g|ml|l)\b)?)\s+(?:de\s+)?(.+)$/i);
+  return m ? { qty: m[1], name: m[2] } : { qty: '', name: line };
+}
+
 const detailsOf = (details, meal, name) => (Object.hasOwn(details[meal], name) ? details[meal][name] : []);
 
 function formatBox(state, box) {
@@ -204,6 +226,6 @@ function needsBackup(state, now) {
 if (typeof module !== 'undefined') {
   module.exports = {
     MEALS, GENERAL, SECTIONS, CHEAT, emptyState, dateKey, addDays, isWeekend, setMeal, isCheat, cheatText, cheatNote,
-    parseBoxes, detailsOf, formatBox, loadState, makeBackup, parseBackup, mergeBackup, needsBackup,
+    parseBoxes, applyPaste, splitEmoji, splitQuantity, detailsOf, formatBox, loadState, makeBackup, parseBackup, mergeBackup, needsBackup,
   };
 }

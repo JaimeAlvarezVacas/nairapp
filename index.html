@@ -9,101 +9,233 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Comidas">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#fbfbf8" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#191b16" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f5f6f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141613" media="(prefers-color-scheme: dark)">
 <style>
   :root {
-    --bg: #fbfbf8; --surface: #fff; --text: #22251c; --muted: #646858; --line: #e0e1d6;
-    --accent: #4f6118; --on-accent: #fff; --tint: #f0f3e2; --warn-bg: #fbeed0; --warn-text: #5e4509;
+    --bg: #f5f6f1; --card: #fff; --ink: #1c211d; --soft: #626a63; --line: #e4e6df; --track: #e7e9e2;
+    --primary: #12795a; --on-primary: #fff; --primary-tint: #dff3ea;
+    --warn-bg: #fff3d6; --warn-ink: #6b4a00;
+    --shadow: 0 1px 2px rgba(28, 33, 29, .05), 0 6px 20px rgba(28, 33, 29, .06);
+    --display: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
+  .m-desayuno { --c: #8f5600; --t: #fff0d4; --r: #f5a623; }
+  .m-comida { --c: #bf3425; --t: #ffe6e2; --r: #f0604d; }
+  .m-merienda { --c: #ad2467; --t: #fde5f0; --r: #e0559b; }
+  .m-cena { --c: #4343c2; --t: #e8e8ff; --r: #6363e0; }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #191b16; --surface: #23261f; --text: #edefe6; --muted: #a6aa9b; --line: #3a3e33;
-      --accent: #b7cc6c; --on-accent: #1d2308; --tint: #2b3018; --warn-bg: #43361a; --warn-text: #f4dfa8;
+      --bg: #141613; --card: #1f221e; --ink: #eef0ea; --soft: #a3aaa2; --line: #30342e; --track: #30342e;
+      --primary: #4cc79d; --on-primary: #06281d; --primary-tint: #173428;
+      --warn-bg: #3d3115; --warn-ink: #f7dfa2;
+      --shadow: none;
     }
+    .m-desayuno { --c: #f8c56b; --t: #3a2c11; --r: #f5a623; }
+    .m-comida { --c: #ff9e92; --t: #3f1f1b; --r: #f0604d; }
+    .m-merienda { --c: #f59ac6; --t: #3c1b2c; --r: #e0559b; }
+    .m-cena { --c: #b1b1ff; --t: #25254b; --r: #7e7ef0; }
   }
+
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html { -webkit-text-size-adjust: 100%; }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 17px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
   main {
     max-width: 560px; margin: 0 auto;
-    padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 88px);
+    padding: calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 96px);
   }
   button, textarea, input { font: inherit; color: inherit; }
   button { cursor: pointer; touch-action: manipulation; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  h1, h2 { font-family: ui-serif, Georgia, serif; font-weight: 600; text-wrap: balance; }
-  h2 { font-size: 24px; margin: 28px 0 10px; }
-  p { margin: 8px 0; }
-  ul, ol { margin: 0; padding-left: 20px; }
-  li { margin-bottom: 4px; overflow-wrap: anywhere; }
-  .muted { color: var(--muted); font-size: 15px; }
+  :focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font: 700 32px/1.15 var(--display); letter-spacing: -.01em; }
+  .section-title { font: 700 19px/1.25 var(--display); margin: 28px 0 10px; }
+  .soft { color: var(--soft); font-size: 15px; }
+  .card { background: var(--card); border-radius: 20px; box-shadow: var(--shadow); }
+  @media (prefers-color-scheme: dark) { .card { border: 1px solid var(--line); } }
 
-  .day { display: flex; align-items: center; gap: 8px; }
-  .day h1 { flex: 1; margin: 0; font-size: 20px; text-align: center; }
-  .day h1::first-letter, .entry h3::first-letter { text-transform: uppercase; }
-  .arrow { width: 44px; height: 44px; font-size: 22px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
-  .arrow:disabled { opacity: .3; }
-  .today-link { display: block; margin: 8px auto 0; border: 0; background: none; color: var(--accent); min-height: 44px; }
-
-  .options { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-  .option {
-    display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 10px 14px;
-    text-align: left; background: none; border: 0; border-top: 1px solid var(--line);
+  .primary, .secondary {
+    width: 100%; min-height: 50px; border-radius: 14px; font-weight: 600; padding: 8px 16px;
+    display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform .12s;
   }
-  .option:first-child { border-top: 0; }
-  .option:active { background: var(--tint); }
-  .option:focus-visible { outline-offset: -2px; }
-  .option::before { content: ""; flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); }
+  .primary { background: var(--primary); color: var(--on-primary); border: 0; }
+  .secondary { background: transparent; border: 1.5px solid var(--line); }
+  .primary:active, .secondary:active, .tile:active { transform: scale(.97); }
 
-  .chosen { background: var(--tint); border-radius: 12px; padding: 6px 14px 14px; }
-  .chosen-head { display: flex; align-items: center; gap: 8px; min-height: 48px; }
-  .chosen-name { flex: 1; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
-  .change { flex: none; min-height: 44px; padding: 0 0 0 10px; border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 15px; }
-  .chosen h3 { margin: 12px 0 4px; font-size: 15px; font-weight: 600; color: var(--muted); }
+  /* Hoy: header and week */
+  .top { display: flex; align-items: center; gap: 8px; }
+  .top > div { flex: 1; min-width: 0; }
+  .top .soft::first-letter, .day-card h3::first-letter { text-transform: uppercase; }
+  .round {
+    flex: none; width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--card);
+    box-shadow: var(--shadow); display: grid; place-items: center; font-size: 22px; line-height: 1;
+  }
+  .round:disabled { opacity: .35; box-shadow: none; }
+  .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 16px 0; }
+  .wday {
+    display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 72px; padding: 8px 0 9px;
+    border: 0; background: none; border-radius: 16px; min-width: 0;
+  }
+  .wday small { font-size: 12px; font-weight: 600; color: var(--soft); }
+  .wday b { font: 700 17px/1.2 var(--display); font-variant-numeric: tabular-nums; }
+  .wday:disabled { opacity: .35; }
+  .wday.today b { color: var(--primary); }
+  .wday[aria-current="date"] { background: var(--ink); color: var(--bg); }
+  .wday[aria-current="date"] small, .wday[aria-current="date"].today b { color: var(--bg); }
+  .pips { display: flex; gap: 3px; height: 6px; margin-top: 2px; }
+  .pips i { width: 6px; height: 6px; border-radius: 50%; background: var(--track); }
+  .wday[aria-current="date"] .pips i { background: color-mix(in srgb, var(--bg) 30%, transparent); }
+  .pips i.on, .wday[aria-current="date"] .pips i.on { background: var(--r); }
 
-  .field { width: 100%; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: 16px; }
-  textarea.field { min-height: 130px; resize: vertical; display: block; }
-  .chosen .field { margin-top: 2px; }
+  /* The plate: four arcs, one per meal */
+  .progress { display: flex; align-items: center; gap: 16px; padding: 16px; margin-bottom: 16px; }
+  .plate { position: relative; flex: none; width: 92px; height: 92px; }
+  .plate svg { display: block; width: 100%; height: 100%; transform: rotate(-90deg); }
+  .plate circle { fill: none; stroke-width: 11; stroke-linecap: round; }
+  .plate .base { stroke: var(--track); }
+  .plate .on { stroke: var(--r); }
+  .plate .new { animation: draw .5s ease-out; }
+  @keyframes draw { from { stroke-dasharray: 0 100; } }
+  .plate span { position: absolute; inset: 0; display: grid; place-items: center; font: 700 22px var(--display); font-variant-numeric: tabular-nums; }
+  .progress strong { display: block; font: 700 19px/1.25 var(--display); }
 
-  .banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 12px; padding: 12px 14px; margin: 12px 0; }
-  .banner p { margin: 0 0 10px; }
-  .primary, .secondary { width: 100%; min-height: 48px; border-radius: 10px; font-weight: 600; padding: 8px 14px; }
-  .primary { background: var(--accent); color: var(--on-accent); border: 0; }
-  .secondary { background: var(--surface); border: 1px solid var(--line); margin-top: 8px; }
+  /* Meals */
+  .meal { margin-bottom: 12px; overflow: hidden; scroll-margin-top: 12px; }
+  .meal h2 { font: inherit; }
+  .meal-head {
+    display: flex; align-items: center; gap: 12px; width: 100%; min-height: 72px; padding: 12px 14px;
+    border: 0; background: none; text-align: left;
+  }
+  .meal-head:focus-visible { outline-offset: -3px; border-radius: 20px; }
+  .badge { flex: none; width: 48px; height: 48px; border-radius: 15px; background: var(--t); display: grid; place-items: center; font-size: 25px; line-height: 1; }
+  .meal-text { flex: 1; min-width: 0; }
+  .meal-text b { display: block; font: 700 18px/1.25 var(--display); color: var(--c); }
+  .meal-text span { display: block; font-size: 14px; color: var(--soft); overflow-wrap: anywhere; }
+  .done { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: var(--on-primary); display: grid; place-items: center; }
+  .chev { flex: none; width: 18px; height: 18px; color: var(--soft); transition: transform .2s; }
+  .open .chev { transform: rotate(180deg); }
+  .meal-body { padding: 2px 14px 14px; }
+  .enter { animation: rise .24s ease-out; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 
-  .entry { border-top: 1px solid var(--line); padding: 12px 0; }
-  .entry h3 { margin: 0 0 6px; font-size: 16px; }
-  .entry dl { margin: 0; display: grid; grid-template-columns: 5.5em 1fr; gap: 3px 12px; }
-  .entry dt { color: var(--muted); font-size: 15px; }
-  .entry dd { margin: 0; overflow-wrap: anywhere; }
-  .tips li { margin-bottom: 12px; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tile {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; min-height: 118px; padding: 13px;
+    border: 0; border-radius: 16px; background: var(--t); text-align: left; font-weight: 600; font-size: 15px; line-height: 1.3;
+    overflow-wrap: anywhere; transition: transform .12s;
+  }
+  .tile em { font-style: normal; font-size: 30px; line-height: 1; }
+  .tile.cheat { grid-column: 1 / -1; min-height: 60px; flex-direction: row; align-items: center; background: none; border: 1.5px dashed var(--r); }
+
+  .chosen-head { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 16px; background: var(--t); }
+  .chosen-head strong { flex: 1; min-width: 0; font: 700 16px/1.3 var(--display); overflow-wrap: anywhere; }
+  .change { flex: none; min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px; background: var(--card); color: var(--c); font-size: 14px; font-weight: 600; }
+  .block h3 { margin: 18px 0 8px; font: 700 15px/1.3 var(--display); color: var(--c); }
+  .ingredients { list-style: none; margin: 0; padding: 0; }
+  .ingredients li { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+  .ingredients li:first-child { border-top: 0; padding-top: 0; }
+  .ingredients b { flex: none; min-width: 52px; font-variant-numeric: tabular-nums; }
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  .steps li { position: relative; padding-left: 34px; margin-bottom: 10px; counter-increment: step; overflow-wrap: anywhere; }
+  .steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--t); color: var(--c); font-size: 13px; font-weight: 700; display: grid; place-items: center;
+  }
+  .steps.single li { padding-left: 0; }
+  .steps.single li::before { display: none; }
+  .note { display: flex; gap: 8px; padding: 10px 12px; margin-bottom: 8px; border-radius: 12px; background: var(--bg); font-size: 14px; overflow-wrap: anywhere; }
+  .field { width: 100%; padding: 12px 14px; background: var(--bg); border: 1.5px solid var(--line); border-radius: 14px; font-size: 16px; }
+  .field:focus { border-color: var(--primary); outline: 0; }
+  textarea.field { min-height: 150px; resize: vertical; display: block; line-height: 1.4; }
+  .chosen-note { margin-top: 10px; }
+
+  .banner { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: var(--warn-bg); color: var(--warn-ink); border-radius: 16px; padding: 12px 14px; margin-bottom: 12px; }
+  .banner p { flex: 1 1 180px; font-size: 15px; }
+  .banner .primary { width: auto; min-height: 44px; flex: none; }
+  .empty { text-align: center; padding: 28px 20px; margin-bottom: 12px; }
+  .empty em { font-style: normal; font-size: 48px; display: block; margin-bottom: 8px; }
+  .empty p { margin-bottom: 16px; }
+
+  /* Historial */
+  .stack { display: grid; gap: 10px; padding: 16px; }
+  .day-card { padding: 14px 16px; margin-bottom: 10px; }
+  .day-card header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .day-card h3 { flex: 1; font: 700 16px/1.3 var(--display); }
+  .day-row { display: flex; gap: 10px; padding: 6px 0; align-items: flex-start; }
+  .day-row em { flex: none; width: 30px; height: 30px; border-radius: 10px; background: var(--t); display: grid; place-items: center; font-style: normal; font-size: 16px; }
+  .day-row div { min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
+  .day-row small { display: block; font-size: 12px; font-weight: 600; color: var(--c); }
+
+  /* Consejos */
+  .tip { display: flex; gap: 12px; padding: 14px; margin-bottom: 10px; }
+  .tip em { flex: none; width: 42px; height: 42px; border-radius: 14px; background: var(--primary-tint); display: grid; place-items: center; font-style: normal; font-size: 22px; }
+  .tip div { min-width: 0; font-size: 15px; overflow-wrap: anywhere; }
+  .tip strong { display: block; font: 700 16px/1.3 var(--display); margin-bottom: 2px; }
+
+  /* Pauta */
+  .edit { margin-bottom: 10px; }
+  .edit summary { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 14px; cursor: pointer; list-style: none; font-weight: 600; }
+  .edit summary::-webkit-details-marker { display: none; }
+  .edit .grow { flex: 1; min-width: 0; }
+  .edit summary small { display: block; font-weight: 400; color: var(--soft); font-size: 14px; }
+  .edit[open] .chev { transform: rotate(180deg); }
+  .edit .field { width: calc(100% - 28px); margin: 0 14px 14px; }
+  .help { font-size: 14px; }
+  .help code { font-family: inherit; font-weight: 700; color: var(--primary); }
 
   nav {
-    position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--surface);
-    border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom);
+    position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; z-index: 5;
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(18px); backdrop-filter: saturate(180%) blur(18px);
+    border-top: 1px solid var(--line); padding: 6px 8px calc(env(safe-area-inset-bottom) + 6px);
   }
-  nav button { flex: 1; min-width: 0; min-height: 56px; border: 0; background: none; color: var(--muted); font-size: 14px; font-weight: 600; }
-  nav button[aria-current="page"] { color: var(--accent); }
+  nav button {
+    flex: 1; max-width: 140px; min-width: 0; min-height: 54px; border: 0; background: none; color: var(--soft); border-radius: 14px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 12px; font-weight: 600;
+  }
+  nav svg { width: 24px; height: 24px; }
+  nav button[aria-current="page"] { color: var(--primary); }
+
+  #toast {
+    position: fixed; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom) + 84px); z-index: 6; display: flex; justify-content: center; pointer-events: none;
+  }
+  #toast div { max-width: 520px; padding: 12px 16px; border-radius: 14px; background: var(--ink); color: var(--bg); font-size: 15px; font-weight: 500; animation: rise .2s ease-out; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before { animation: none !important; transition: none !important; }
+  }
 </style>
 </head>
 <body>
 <main id="app"></main>
+<div id="toast" aria-live="polite"></div>
 <nav id="tabs" aria-label="Secciones"></nav>
 <script src="logic.js"></script>
 <script>
 const KEY = 'comidas-v1';
 const LABELS = { desayuno: 'Desayuno', comida: 'Comida', merienda: 'Merienda', cena: 'Cena', consejos: 'Consejos' };
-const TABS = { hoy: 'Hoy', historial: 'Historial', consejos: 'Consejos', pauta: 'Pauta' };
+const EMOJI = { desayuno: '🍳', comida: '🍲', merienda: '🍎', cena: '🌙', consejos: '💡' };
+const CHEAT_EMOJI = '🍕';
+const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+const svg = (body, attrs = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${attrs}>${body}</svg>`;
+const CHEVRON = svg('<path d="m6 9 6 6 6-6"/>', 'class="chev"');
+const CHECK = svg('<path d="m6 12 4 4 8-9"/>', 'width="14" height="14" stroke-width="3"');
+const TABS = {
+  hoy: ['Hoy', svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/>')],
+  historial: ['Historial', svg('<rect x="4" y="5" width="16" height="16" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/>')],
+  consejos: ['Consejos', svg('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3Z"/>')],
+  pauta: ['Pauta', svg('<path d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M9 8h6M9 12h6M9 16h4"/>')],
+};
 const app = document.getElementById('app');
 
 let tab = 'hoy';
 let viewDay = null; // null follows today, so the app rolls over at midnight
+let openMeal; // undefined opens the next meal to choose, null keeps them all closed
+let enterMeal = null; // the only meal that animates on this render
 let corruptFound = false;
 let state = emptyState();
+const drawnArcs = new Set();
 
 try {
   const loaded = loadState(localStorage.getItem(KEY));
@@ -129,6 +261,7 @@ function el(tag, props = {}, ...children) {
   const node = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
     if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else if (k === 'html') node.innerHTML = v; // only ever our own constants
     else if (k in node) node[k] = v;
     else node.setAttribute(k, v);
   }
@@ -136,7 +269,18 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
+let toastTimer;
+function toast(message) {
+  const box = document.getElementById('toast');
+  box.replaceChildren(el('div', {}, message));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => box.replaceChildren(), 4000);
+}
+
 const longDate = key => keyToDate(key).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+const dayLog = day => state.log[day] || {};
+const emojiFor = (meal, text) => (isCheat(text) ? CHEAT_EMOJI : splitEmoji(text).emoji || EMOJI[meal]);
+const nameOf = text => splitEmoji(text).name;
 
 async function saveBackup() {
   const now = new Date();
@@ -149,7 +293,7 @@ async function saveBackup() {
     try {
       await navigator.share({ files: [file], title: 'Copia de Mis comidas' });
     } catch (e) {
-      if (e.name !== 'AbortError') alert('No se ha podido guardar la copia.');
+      if (e.name !== 'AbortError') toast('No se ha podido guardar la copia. Inténtalo de nuevo.');
       return;
     }
   } else {
@@ -160,6 +304,7 @@ async function saveBackup() {
   state.lastBackup = now.toISOString();
   save();
   render();
+  toast('Copia guardada');
 }
 
 async function restoreBackup(file) {
@@ -170,9 +315,9 @@ async function restoreBackup(file) {
     corruptFound = false;
     save();
     render();
-    alert(`Copia restaurada. Comidas recuperadas: ${result.added}.`);
+    toast(`Copia restaurada. Comidas recuperadas: ${result.added}.`);
   } catch (e) {
-    alert(`${e.message}. No se ha cambiado nada.`);
+    toast(`${e.message}. No se ha cambiado nada.`);
   }
 }
 
@@ -184,67 +329,152 @@ function banners() {
   }
   if (needsBackup(state, new Date())) {
     out.push(el('div', { className: 'banner' },
-      el('p', {}, state.lastBackup
-        ? 'Hace más de una semana de tu última copia de seguridad.'
-        : 'Aún no tienes copia de seguridad de tu historial.'),
+      el('p', {}, state.lastBackup ? 'Hace más de una semana de tu última copia.' : 'Protege tu historial con una copia.'),
       el('button', { className: 'primary', onclick: saveBackup }, 'Guardar copia')));
   }
   return out;
 }
 
-function chosenPanel(day, meal, selected, pick) {
+function plate(day) {
+  const log = dayLog(day);
+  const done = MEALS.filter(m => log[m]).length;
+  const arcs = MEALS.map((meal, i) => {
+    // pathLength 100 with a quarter per meal; the gap leaves room for the round caps
+    const attrs = `cx="50" cy="50" r="42" pathLength="100" stroke-dasharray="17 83" stroke-dashoffset="${-(i * 25 + 4)}"`;
+    if (!log[meal]) return `<circle class="base" ${attrs}/>`;
+    const id = `${day}/${meal}`;
+    const isNew = !drawnArcs.has(id);
+    drawnArcs.add(id);
+    return `<circle class="on m-${meal}${isNew ? ' new' : ''}" ${attrs}/>`;
+  }).join('');
+  return el('div', { className: 'plate', role: 'img', 'aria-label': `${done} de 4 comidas marcadas` },
+    el('div', { html: `<svg viewBox="0 0 100 100" aria-hidden="true">${arcs}</svg>` }),
+    el('span', { 'aria-hidden': 'true' }, `${done}/4`));
+}
+
+const pips = day => el('span', { className: 'pips', 'aria-hidden': 'true' },
+  ...MEALS.map(m => el('i', { className: `m-${m}${dayLog(day)[m] ? ' on' : ''}` })));
+
+function weekStrip(day, today) {
+  const monday = addDays(day, -((keyToDate(day).getDay() + 6) % 7));
+  return el('div', { className: 'week' }, ...WEEKDAYS.map((letter, i) => {
+    const key = addDays(monday, i);
+    return el('button', {
+      className: `wday${key === today ? ' today' : ''}`,
+      disabled: key > today,
+      'aria-label': `${longDate(key)}, ${MEALS.filter(m => dayLog(key)[m]).length} de 4 comidas`,
+      ...(key === day ? { 'aria-current': 'date' } : {}),
+      onclick: () => goTo(key),
+    }, el('small', {}, letter), el('b', {}, String(keyToDate(key).getDate())), pips(key));
+  }));
+}
+
+function goTo(key) {
+  viewDay = key === dateKey(new Date()) ? null : key;
+  openMeal = undefined;
+  render();
+}
+
+function chosenBody(day, meal, selected, pick) {
   const cheat = isCheat(selected);
-  const block = (title, list, ...lines) => (lines.length ? [el('h3', {}, title), el(list, {}, ...lines.map(l => el('li', {}, l)))] : []);
-  const ingredients = cheat ? [] : detailsOf(state.details, meal, selected);
+  const lines = cheat ? [] : detailsOf(state.details, meal, selected);
   const prep = cheat ? [] : detailsOf(state.prep, meal, selected);
   const tips = cheat ? [] : state.tips[meal];
-  return el('div', { className: 'chosen' },
+  return [
     el('div', { className: 'chosen-head' },
-      el('p', { className: 'chosen-name' }, cheat ? CHEAT : selected),
+      el('strong', {}, cheat ? CHEAT : nameOf(selected)),
       el('button', { className: 'change', 'aria-label': `Cambiar ${LABELS[meal]}`, onclick: () => pick(null) }, 'Cambiar')),
     ...(cheat ? [el('input', {
-      className: 'field', placeholder: 'Qué ha sido (opcional)…', 'aria-label': `Cheat meal de ${LABELS[meal]}: qué ha sido`,
+      className: 'field chosen-note', placeholder: 'Qué ha sido (opcional)…', 'aria-label': `Cheat meal de ${LABELS[meal]}: qué ha sido`,
       value: cheatNote(selected),
       oninput: e => { setMeal(state.log, day, meal, cheatText(e.target.value)); save(); },
     })] : []),
-    ...block('Ingredientes', 'ul', ...ingredients),
-    ...block('Preparación', 'ul', ...prep),
-    ...block('Consejos', 'ul', ...tips));
+    ...(lines.length ? [el('section', { className: 'block' }, el('h3', {}, 'Ingredientes'),
+      el('ul', { className: 'ingredients' }, ...lines.map(line => {
+        const { qty, name } = splitQuantity(line);
+        return el('li', {}, ...(qty ? [el('b', {}, qty)] : []), el('span', {}, name));
+      })))] : []),
+    ...(prep.length ? [el('section', { className: 'block' }, el('h3', {}, 'Preparación'),
+      el('ol', { className: `steps${prep.length === 1 ? ' single' : ''}` }, ...prep.map(step => el('li', {}, step))))] : []),
+    ...(tips.length ? [el('section', { className: 'block' }, el('h3', {}, 'Consejos'),
+      ...tips.map(tip => {
+        const { emoji, name } = splitEmoji(tip);
+        return el('p', { className: 'note' }, el('span', { 'aria-hidden': 'true' }, emoji || EMOJI.consejos), el('span', {}, name));
+      }))] : []),
+  ];
 }
 
-function mealSection(day, meal) {
-  const selected = state.log[day]?.[meal];
-  const pick = text => { setMeal(state.log, day, meal, text); save(); render(); };
+function mealCard(day, meal, isOpen) {
+  const selected = dayLog(day)[meal];
+  const pick = text => {
+    setMeal(state.log, day, meal, text);
+    save();
+    openMeal = meal;
+    enterMeal = meal;
+    render();
+  };
   const names = [...state.options[meal], ...(isWeekend(day) ? [CHEAT] : [])];
-  if (!selected && !names.length) return el('section', {}, el('h2', {}, LABELS[meal]), el('p', { className: 'muted' }, 'Sin opciones en la pauta.'));
-  return el('section', {},
-    el('h2', {}, LABELS[meal]),
-    selected
-      ? chosenPanel(day, meal, selected, pick)
-      : el('div', { className: 'options' }, ...names.map(name => el('button', { className: 'option', onclick: () => pick(name) }, name))));
+  const subtitle = selected
+    ? (isOpen ? 'Tu elección' : nameOf(selected))
+    : (names.length ? 'Elige qué has comido' : 'Sin opciones en la pauta');
+  const toggle = () => {
+    openMeal = isOpen ? null : meal;
+    enterMeal = meal;
+    render();
+    if (!isOpen) document.getElementById(`meal-${meal}`).scrollIntoView({ block: 'nearest' });
+  };
+  const body = !isOpen ? [] : [el('div', { className: `meal-body${enterMeal === meal ? ' enter' : ''}` },
+    ...(selected
+      ? chosenBody(day, meal, selected, pick)
+      : [el('div', { className: 'tiles' }, ...names.map(option => el('button', {
+        className: `tile${option === CHEAT ? ' cheat' : ''}`, onclick: () => pick(option),
+      },
+      el('em', { 'aria-hidden': 'true' }, emojiFor(meal, option)),
+      el('span', {}, nameOf(option)))))]))];
+  return el('section', { className: `card meal m-${meal}${isOpen ? ' open' : ''}`, id: `meal-${meal}` },
+    el('h2', {}, el('button', { className: 'meal-head', 'aria-expanded': String(isOpen), onclick: toggle },
+      el('span', { className: 'badge', 'aria-hidden': 'true' }, selected ? emojiFor(meal, selected) : EMOJI[meal]),
+      el('span', { className: 'meal-text' }, el('b', {}, LABELS[meal]), el('span', {}, subtitle)),
+      ...(selected ? [el('span', { className: 'done', html: CHECK })] : []),
+      el('span', { html: CHEVRON, style: 'display:contents' }))),
+    ...body);
 }
 
 function renderHoy() {
   const today = dateKey(new Date());
   const day = viewDay || today;
-  const go = n => {
-    const next = addDays(day, n);
-    viewDay = next === today ? null : next;
-    render();
-  };
+  const log = dayLog(day);
+  const next = MEALS.find(m => !log[m]);
+  const isOpen = openMeal === undefined ? next : openMeal;
   const hasOptions = MEALS.some(m => state.options[m].length);
+  const week = n => {
+    const target = addDays(day, n * 7);
+    goTo(target > today ? today : target);
+  };
+  const thisWeekEnds = addDays(day, 6 - ((keyToDate(day).getDay() + 6) % 7));
   app.append(
-    el('div', { className: 'day' },
-      el('button', { className: 'arrow', 'aria-label': 'Día anterior', onclick: () => go(-1) }, '‹'),
-      el('h1', {}, day === today ? `Hoy, ${longDate(day)}` : longDate(day)),
-      el('button', { className: 'arrow', 'aria-label': 'Día siguiente', disabled: day >= today, onclick: () => go(1) }, '›')),
-    ...(day === today ? [] : [el('button', { className: 'today-link', onclick: () => { viewDay = null; render(); } }, 'Volver a hoy')]),
+    el('div', { className: 'top' },
+      el('div', {},
+        el('h1', {}, day === today ? 'Hoy' : day === addDays(today, -1) ? 'Ayer' : keyToDate(day).toLocaleDateString('es-ES', { weekday: 'long' }).replace(/^./, c => c.toUpperCase())),
+        el('p', { className: 'soft' }, day === today || day === addDays(today, -1)
+          ? longDate(day)
+          : keyToDate(day).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' }))),
+      el('button', { className: 'round', 'aria-label': 'Semana anterior', onclick: () => week(-1) }, '‹'),
+      el('button', { className: 'round', 'aria-label': 'Semana siguiente', disabled: thisWeekEnds >= today, onclick: () => week(1) }, '›')),
+    weekStrip(day, today),
     ...banners(),
-    ...(hasOptions ? [] : [el('div', { className: 'banner' },
-      el('p', {}, 'Todavía no hay pauta. Añade tus opciones para empezar.'),
-      el('button', { className: 'primary', onclick: () => { tab = 'pauta'; render(); } }, 'Añadir pauta'))]),
-    ...MEALS.map(meal => mealSection(day, meal)),
+    ...(hasOptions
+      ? [el('div', { className: 'card progress' }, plate(day),
+        el('div', {},
+          el('strong', {}, next ? `Siguiente: ${LABELS[next].toLowerCase()}` : '¡Día completo! 🎉'),
+          el('p', { className: 'soft' }, next ? `${EMOJI[next]} Elige lo que más te apetezca` : 'Has marcado las cuatro comidas')))]
+      : [el('div', { className: 'card empty' },
+        el('em', { 'aria-hidden': 'true' }, '🍽️'),
+        el('p', { className: 'soft' }, 'Añade tu pauta para ver aquí tus comidas de cada día.'),
+        el('button', { className: 'primary', onclick: () => { tab = 'pauta'; render(); } }, 'Añadir pauta'))]),
+    ...(hasOptions || Object.keys(log).length ? MEALS.map(meal => mealCard(day, meal, isOpen === meal)) : []),
   );
+  enterMeal = null;
 }
 
 function renderHistorial() {
@@ -254,70 +484,102 @@ function renderHistorial() {
   });
   const days = Object.keys(state.log).sort().reverse();
   app.append(
-    el('h2', {}, 'Copia de seguridad'),
-    el('p', { className: 'muted' }, state.lastBackup
-      ? `Última copia: ${new Date(state.lastBackup).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}. Guárdala en iCloud Drive.`
-      : 'Sin copias todavía. Guárdala en iCloud Drive: si borras la app, podrás recuperar tu historial.'),
-    el('button', { className: 'primary', onclick: saveBackup }, 'Guardar copia'),
-    el('button', { className: 'secondary', onclick: () => picker.click() }, 'Restaurar copia'),
-    picker,
-    el('h2', {}, 'Historial'),
-    ...(days.length ? [] : [el('p', { className: 'muted' }, 'Aquí verás lo que vayas marcando cada día.')]),
-    ...days.map(day => el('article', { className: 'entry' },
-      el('h3', {}, longDate(day)),
-      el('dl', {}, ...MEALS.filter(m => state.log[day][m]).flatMap(m => [
-        el('dt', {}, LABELS[m]), el('dd', {}, state.log[day][m]),
-      ])))),
+    el('h1', {}, 'Historial'),
+    el('h2', { className: 'section-title' }, '🛟 Copia de seguridad'),
+    el('div', { className: 'card stack' },
+      el('p', { className: 'soft' }, state.lastBackup
+        ? `Última copia: ${new Date(state.lastBackup).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}. Guárdala en iCloud Drive.`
+        : 'Sin copias todavía. Guárdala en iCloud Drive para recuperar tu historial si borras la app.'),
+      el('button', { className: 'primary', onclick: saveBackup }, 'Guardar copia'),
+      el('button', { className: 'secondary', onclick: () => picker.click() }, 'Restaurar copia'),
+      picker),
+    el('h2', { className: 'section-title' }, '🗓️ Tus días'),
+    ...(days.length ? [] : [el('div', { className: 'card empty' },
+      el('em', { 'aria-hidden': 'true' }, '🍽️'),
+      el('p', { className: 'soft', style: 'margin:0' }, 'Aquí verás lo que vayas marcando cada día.'))]),
+    ...days.map(day => el('article', { className: 'card day-card' },
+      el('header', {}, el('h3', {}, longDate(day)), pips(day)),
+      ...MEALS.filter(m => state.log[day][m]).map(m => el('div', { className: `day-row m-${m}` },
+        el('em', { 'aria-hidden': 'true' }, emojiFor(m, state.log[day][m])),
+        el('div', {}, el('small', {}, LABELS[m]), nameOf(state.log[day][m])))))),
   );
 }
 
 function renderConsejos() {
   const tips = state.tips[GENERAL];
   app.append(
-    el('h2', {}, 'Consejos'),
-    tips.length
-      ? el('ul', { className: 'tips' }, ...tips.map(tip => el('li', {}, tip)))
-      : el('p', { className: 'muted' }, 'Aquí verás los consejos generales de tu pauta. Se añaden desde Pauta.'),
+    el('h1', { style: 'margin-bottom:16px' }, 'Consejos'),
+    ...(tips.length
+      ? tips.map(tip => {
+        const { emoji, name } = splitEmoji(tip);
+        const title = name.match(/^([^:]{3,40}):\s+(.+)$/);
+        return el('article', { className: 'card tip' },
+          el('em', { 'aria-hidden': 'true' }, emoji || EMOJI.consejos),
+          el('div', {}, ...(title ? [el('strong', {}, title[1]), title[2]] : [name])));
+      })
+      : [el('div', { className: 'card empty' },
+        el('em', { 'aria-hidden': 'true' }, '💡'),
+        el('p', { className: 'soft', style: 'margin:0' }, 'Aquí verás los consejos generales de tu pauta.'))]),
   );
 }
 
 function renderPauta() {
-  const boxes = {};
-  for (const section of SECTIONS) {
-    boxes[section] = el('textarea', {
-      className: 'field', id: `box-${section}`, value: formatBox(state, section),
-    });
-  }
-  const onSave = () => {
-    try {
-      Object.assign(state, parseBoxes(Object.fromEntries(SECTIONS.map(s => [s, boxes[s].value]))));
-    } catch (e) {
-      alert(`${e.message}. Usa Desayuno, Comida, Merienda, Cena o Consejos. No se ha guardado nada.`);
-      return;
-    }
+  const finish = (changes, message) => {
+    Object.assign(state, changes);
     save();
     tab = 'hoy';
     viewDay = null;
+    openMeal = undefined;
     render();
+    window.scrollTo(0, 0);
+    toast(message);
   };
+  const attempt = build => {
+    try {
+      finish(build(), 'Pauta guardada. Tu historial sigue igual.');
+    } catch (e) {
+      toast(`${e.message}. No se ha guardado nada.`);
+    }
+  };
+  const pasted = el('textarea', { className: 'field', placeholder: 'Pega aquí tu pauta completa…', 'aria-label': 'Pauta completa' });
+  const boxes = {};
+  const sections = SECTIONS.map(section => {
+    boxes[section] = el('textarea', { className: 'field', 'aria-label': LABELS[section], value: formatBox(state, section) });
+    const count = section === GENERAL ? state.tips[GENERAL].length : state.options[section].length;
+    return el('details', { className: `card edit m-${section}` },
+      el('summary', {},
+        el('span', { className: 'badge', style: section === GENERAL ? 'background:var(--primary-tint)' : '', 'aria-hidden': 'true' }, EMOJI[section]),
+        el('span', { className: 'grow' }, LABELS[section], el('small', {}, `${count} ${section === GENERAL ? 'consejos' : 'opciones'}`)),
+        el('span', { html: CHEVRON, style: 'display:contents' })),
+      boxes[section]);
+  });
   app.append(
-    el('p', { className: 'muted' }, 'Una opción por línea. Debajo de cada opción: «- » para ingredientes y «> » para preparación. «! » añade un consejo a toda la comida. Tu historial no cambia al actualizar la pauta.'),
-    ...SECTIONS.flatMap(section => [
-      el('h2', {}, el('label', { htmlFor: `box-${section}` }, LABELS[section])),
-      boxes[section],
-    ]),
-    el('p', { className: 'muted' }, 'Si pegas la pauta entera en un cuadro, las líneas # Desayuno, # Comida, # Merienda, # Cena y # Consejos reparten cada parte en su sitio.'),
-    el('button', { className: 'primary', onclick: onSave }, 'Guardar pauta'),
+    el('h1', {}, 'Tu pauta'),
+    el('p', { className: 'soft', style: 'margin-top:4px' }, 'Cada mes, tras tu revisión, actualízala aquí. Tu historial no cambia.'),
+    el('h2', { className: 'section-title' }, '📋 Pegar pauta nueva'),
+    el('div', { className: 'card stack' },
+      pasted,
+      el('button', { className: 'primary', onclick: () => attempt(() => applyPaste(state, pasted.value)) }, 'Guardar pauta')),
+    el('h2', { className: 'section-title' }, '✏️ Editar a mano'),
+    ...sections,
+    el('button', {
+      className: 'secondary',
+      onclick: () => attempt(() => parseBoxes(Object.fromEntries(SECTIONS.map(s => [s, boxes[s].value])))),
+    }, 'Guardar cambios'),
+    el('p', { className: 'soft help', style: 'margin-top:16px' },
+      'Cada línea es una opción. Debajo, ', el('code', {}, '-'), ' indica un ingrediente, ', el('code', {}, '>'),
+      ' un paso de preparación y ', el('code', {}, '!'), ' un consejo para toda la comida. Una línea como ',
+      el('code', {}, '# Cena'), ' empieza otra sección. Si una opción empieza por un emoji, se usa como su imagen.'),
   );
 }
 
 function render() {
   app.replaceChildren();
   ({ hoy: renderHoy, historial: renderHistorial, consejos: renderConsejos, pauta: renderPauta })[tab]();
-  document.getElementById('tabs').replaceChildren(...Object.entries(TABS).map(([id, label]) => el('button', {
+  document.getElementById('tabs').replaceChildren(...Object.entries(TABS).map(([id, [label, icon]]) => el('button', {
     ...(id === tab ? { 'aria-current': 'page' } : {}),
     onclick: () => { tab = id; render(); window.scrollTo(0, 0); },
-  }, label)));
+  }, el('span', { html: icon, style: 'display:contents' }), label)));
 }
 
 // Skip the Pauta tab so coming back from copying the plan doesn't wipe what was typed.
