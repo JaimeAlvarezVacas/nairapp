@@ -46,11 +46,11 @@ test('parseBoxes con una opción por línea en cada cuadro', () => {
 });
 
 test('parseBoxes guarda los ingredientes por comida y opción', () => {
-  const pasted = '# Desayuno\nYogur\n- 200 g de skyr\n• 15 g de nueces\nTostada\n# Merienda\nYogur\n- 170 g de skyr';
+  const pasted = '# Desayuno\nYogur\n- 1 unidad de A\n• 2 unidades de B\nTostada\n# Merienda\nYogur\n- 3 unidades de C';
   const { options, details } = l.parseBoxes({ desayuno: pasted });
   assert.deepEqual(options.desayuno, ['Yogur', 'Tostada']);
-  assert.deepEqual(details.desayuno, { Yogur: ['200 g de skyr', '15 g de nueces'] });
-  assert.deepEqual(details.merienda, { Yogur: ['170 g de skyr'] });
+  assert.deepEqual(details.desayuno, { Yogur: ['1 unidad de A', '2 unidades de B'] });
+  assert.deepEqual(details.merienda, { Yogur: ['3 unidades de C'] });
 });
 
 test('una línea con guion tras una cabecera es una opción, no un ingrediente de la comida anterior', () => {
