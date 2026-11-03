@@ -9,89 +9,84 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Comidas">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#f6f4ee" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1b1d1a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#fbfbf8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#191b16" media="(prefers-color-scheme: dark)">
 <style>
   :root {
-    --bg: #f6f4ee; --card: #fff; --text: #22251f; --muted: #686d62; --line: #dcd9cf;
-    --accent: #2f6b47; --on-accent: #fff; --warn-bg: #fbeed0; --warn-text: #5e4509;
+    --bg: #fbfbf8; --surface: #fff; --text: #22251c; --muted: #646858; --line: #e0e1d6;
+    --accent: #4f6118; --on-accent: #fff; --tint: #f0f3e2; --warn-bg: #fbeed0; --warn-text: #5e4509;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #1b1d1a; --card: #272a25; --text: #eceee8; --muted: #a4a99e; --line: #3b3f38;
-      --accent: #7cc497; --on-accent: #10231a; --warn-bg: #43361a; --warn-text: #f4dfa8;
+      --bg: #191b16; --surface: #23261f; --text: #edefe6; --muted: #a6aa9b; --line: #3a3e33;
+      --accent: #b7cc6c; --on-accent: #1d2308; --tint: #2b3018; --warn-bg: #43361a; --warn-text: #f4dfa8;
     }
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font: 17px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font: 17px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
   main {
     max-width: 560px; margin: 0 auto;
     padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 88px);
   }
   button, textarea, input { font: inherit; color: inherit; }
-  button { cursor: pointer; }
-  h2 { font-size: 15px; font-weight: 600; color: var(--muted); margin: 22px 0 8px; }
+  button { cursor: pointer; touch-action: manipulation; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  h1, h2 { font-family: ui-serif, Georgia, serif; font-weight: 600; text-wrap: balance; }
+  h2 { font-size: 24px; margin: 28px 0 10px; }
   p { margin: 8px 0; }
+  ul, ol { margin: 0; padding-left: 20px; }
+  li { margin-bottom: 4px; overflow-wrap: anywhere; }
   .muted { color: var(--muted); font-size: 15px; }
 
   .day { display: flex; align-items: center; gap: 8px; }
   .day h1 { flex: 1; margin: 0; font-size: 20px; text-align: center; }
   .day h1::first-letter, .entry h3::first-letter { text-transform: uppercase; }
-  .arrow {
-    width: 44px; height: 44px; font-size: 22px; border: 0; border-radius: 12px;
-    background: var(--card); border: 1px solid var(--line);
-  }
+  .arrow { width: 44px; height: 44px; font-size: 22px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
   .arrow:disabled { opacity: .3; }
-  .today-link { display: block; margin: 8px auto 0; border: 0; background: none; color: var(--accent); min-height: 32px; }
+  .today-link { display: block; margin: 8px auto 0; border: 0; background: none; color: var(--accent); min-height: 44px; }
 
+  .options { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
   .option {
-    display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 14px;
-    margin-bottom: 8px; text-align: left; background: var(--card);
-    border: 1px solid var(--line); border-radius: 14px;
+    display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 10px 14px;
+    text-align: left; background: none; border: 0; border-top: 1px solid var(--line);
   }
-  .option::before {
-    content: ""; flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line);
-  }
-  .option[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 600; }
-  .option[aria-pressed="true"]::before {
-    border-color: var(--accent); background: var(--accent);
-    box-shadow: inset 0 0 0 4px var(--card);
-  }
-  .ingredients { margin: -4px 0 10px; padding-left: 14px; color: var(--muted); font-size: 15px; }
-  .ingredients summary { min-height: 36px; display: flex; align-items: center; color: var(--accent); cursor: pointer; }
-  .ingredients summary::before { content: "›"; margin-right: 8px; font-size: 18px; line-height: 1; }
-  .ingredients[open] summary::before { transform: rotate(90deg); }
-  .ingredients summary::-webkit-details-marker { display: none; }
-  .ingredients ul { margin: 0 0 4px; padding-left: 20px; color: var(--text); }
-  .ingredients li { margin-bottom: 3px; }
-  .field {
-    width: 100%; padding: 10px 12px; background: var(--card);
-    border: 1px solid var(--line); border-radius: 12px; font-size: 16px;
-  }
-  .note { margin: 0 0 8px; }
-  textarea.field { min-height: 110px; resize: vertical; display: block; }
+  .option:first-child { border-top: 0; }
+  .option:active { background: var(--tint); }
+  .option:focus-visible { outline-offset: -2px; }
+  .option::before { content: ""; flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); }
 
-  .banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 14px; padding: 12px 14px; margin: 12px 0; }
+  .chosen { background: var(--tint); border-radius: 12px; padding: 6px 14px 14px; }
+  .chosen-head { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+  .chosen-name { flex: 1; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+  .change { flex: none; min-height: 44px; padding: 0 0 0 10px; border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 15px; }
+  .chosen h3 { margin: 12px 0 4px; font-size: 15px; font-weight: 600; color: var(--muted); }
+
+  .field { width: 100%; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: 16px; }
+  textarea.field { min-height: 130px; resize: vertical; display: block; }
+  .chosen .field { margin-top: 2px; }
+
+  .banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 12px; padding: 12px 14px; margin: 12px 0; }
   .banner p { margin: 0 0 10px; }
-  .primary, .secondary { width: 100%; min-height: 48px; border-radius: 12px; font-weight: 600; padding: 8px 14px; }
+  .primary, .secondary { width: 100%; min-height: 48px; border-radius: 10px; font-weight: 600; padding: 8px 14px; }
   .primary { background: var(--accent); color: var(--on-accent); border: 0; }
-  .secondary { background: var(--card); border: 1px solid var(--line); margin-top: 8px; }
+  .secondary { background: var(--surface); border: 1px solid var(--line); margin-top: 8px; }
 
-  .entry { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+  .entry { border-top: 1px solid var(--line); padding: 12px 0; }
   .entry h3 { margin: 0 0 6px; font-size: 16px; }
-  .entry dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; }
+  .entry dl { margin: 0; display: grid; grid-template-columns: 5.5em 1fr; gap: 3px 12px; }
   .entry dt { color: var(--muted); font-size: 15px; }
   .entry dd { margin: 0; overflow-wrap: anywhere; }
+  .tips li { margin-bottom: 12px; }
 
   nav {
-    position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--card);
+    position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--surface);
     border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom);
   }
-  nav button { flex: 1; min-height: 56px; border: 0; background: none; color: var(--muted); font-size: 15px; font-weight: 600; }
+  nav button { flex: 1; min-width: 0; min-height: 56px; border: 0; background: none; color: var(--muted); font-size: 14px; font-weight: 600; }
   nav button[aria-current="page"] { color: var(--accent); }
 </style>
 </head>
@@ -101,15 +96,14 @@
 <script src="logic.js"></script>
 <script>
 const KEY = 'comidas-v1';
-const LABELS = { desayuno: 'Desayuno', comida: 'Comida', merienda: 'Merienda', cena: 'Cena' };
-const TABS = { hoy: 'Hoy', historial: 'Historial', pauta: 'Pauta' };
+const LABELS = { desayuno: 'Desayuno', comida: 'Comida', merienda: 'Merienda', cena: 'Cena', consejos: 'Consejos' };
+const TABS = { hoy: 'Hoy', historial: 'Historial', consejos: 'Consejos', pauta: 'Pauta' };
 const app = document.getElementById('app');
 
 let tab = 'hoy';
 let viewDay = null; // null follows today, so the app rolls over at midnight
 let corruptFound = false;
 let state = emptyState();
-const openDetails = new Set(); // keeps quantities open across re-renders, e.g. after locking the phone while cooking
 
 try {
   const loaded = loadState(localStorage.getItem(KEY));
@@ -198,42 +192,36 @@ function banners() {
   return out;
 }
 
+function chosenPanel(day, meal, selected, pick) {
+  const cheat = isCheat(selected);
+  const block = (title, list, ...lines) => (lines.length ? [el('h3', {}, title), el(list, {}, ...lines.map(l => el('li', {}, l)))] : []);
+  const ingredients = cheat ? [] : detailsOf(state.details, meal, selected);
+  const prep = cheat ? [] : detailsOf(state.prep, meal, selected);
+  const tips = cheat ? [] : state.tips[meal];
+  return el('div', { className: 'chosen' },
+    el('div', { className: 'chosen-head' },
+      el('p', { className: 'chosen-name' }, cheat ? CHEAT : selected),
+      el('button', { className: 'change', 'aria-label': `Cambiar ${LABELS[meal]}`, onclick: () => pick(null) }, 'Cambiar')),
+    ...(cheat ? [el('input', {
+      className: 'field', placeholder: 'Qué ha sido (opcional)…', 'aria-label': `Cheat meal de ${LABELS[meal]}: qué ha sido`,
+      value: cheatNote(selected),
+      oninput: e => { setMeal(state.log, day, meal, cheatText(e.target.value)); save(); },
+    })] : []),
+    ...block('Ingredientes', 'ul', ...ingredients),
+    ...block('Preparación', 'ul', ...prep),
+    ...block('Consejos', 'ul', ...tips));
+}
+
 function mealSection(day, meal) {
   const selected = state.log[day]?.[meal];
-  const pick = text => { toggle(state.log, day, meal, text); save(); render(); };
-  const option = text => {
-    const button = el('button', {
-      className: 'option', 'aria-pressed': String(selected === text), onclick: () => pick(text),
-    }, text);
-    const lines = detailsOf(state.details, meal, text);
-    if (!lines.length) return [button];
-    const id = `${meal}/${text}`;
-    return [button, el('details', {
-      className: 'ingredients',
-      open: openDetails.has(id),
-      ontoggle: e => { if (e.target.open) openDetails.add(id); else openDetails.delete(id); },
-    }, el('summary', {}, 'Ver cantidades'), el('ul', {}, ...lines.map(line => el('li', {}, line))))];
-  };
-
-  const list = [...state.options[meal]];
-  // A choice from an older plan stays visible so it can still be seen and undone.
-  if (selected && !list.includes(selected) && !(isCheat(selected) && isWeekend(day))) list.push(selected);
-  const section = el('section', {}, el('h2', {}, LABELS[meal]), ...list.flatMap(option));
-
-  if (isWeekend(day)) {
-    const cheatOn = isCheat(selected);
-    section.append(el('button', {
-      className: 'option', 'aria-pressed': String(cheatOn), onclick: () => pick(cheatOn ? selected : CHEAT),
-    }, CHEAT));
-    if (cheatOn) {
-      section.append(el('input', {
-        className: 'field note', placeholder: '¿Qué ha sido? (opcional)', 'aria-label': `Cheat meal de ${LABELS[meal]}: qué ha sido`,
-        value: cheatNote(selected),
-        oninput: e => { setMeal(state.log, day, meal, cheatText(e.target.value)); save(); },
-      }));
-    }
-  }
-  return section;
+  const pick = text => { setMeal(state.log, day, meal, text); save(); render(); };
+  const names = [...state.options[meal], ...(isWeekend(day) ? [CHEAT] : [])];
+  if (!selected && !names.length) return el('section', {}, el('h2', {}, LABELS[meal]), el('p', { className: 'muted' }, 'Sin opciones en la pauta.'));
+  return el('section', {},
+    el('h2', {}, LABELS[meal]),
+    selected
+      ? chosenPanel(day, meal, selected, pick)
+      : el('div', { className: 'options' }, ...names.map(name => el('button', { className: 'option', onclick: () => pick(name) }, name))));
 }
 
 function renderHoy() {
@@ -283,18 +271,28 @@ function renderHistorial() {
   );
 }
 
+function renderConsejos() {
+  const tips = state.tips[GENERAL];
+  app.append(
+    el('h2', {}, 'Consejos'),
+    tips.length
+      ? el('ul', { className: 'tips' }, ...tips.map(tip => el('li', {}, tip)))
+      : el('p', { className: 'muted' }, 'Aquí verás los consejos generales de tu pauta. Se añaden desde Pauta.'),
+  );
+}
+
 function renderPauta() {
   const boxes = {};
-  for (const meal of MEALS) {
-    boxes[meal] = el('textarea', {
-      className: 'field', id: `box-${meal}`, value: formatBox(state, meal),
+  for (const section of SECTIONS) {
+    boxes[section] = el('textarea', {
+      className: 'field', id: `box-${section}`, value: formatBox(state, section),
     });
   }
   const onSave = () => {
     try {
-      Object.assign(state, parseBoxes(Object.fromEntries(MEALS.map(m => [m, boxes[m].value]))));
+      Object.assign(state, parseBoxes(Object.fromEntries(SECTIONS.map(s => [s, boxes[s].value]))));
     } catch (e) {
-      alert(`${e.message}. Usa Desayuno, Comida, Merienda o Cena. No se ha guardado nada.`);
+      alert(`${e.message}. Usa Desayuno, Comida, Merienda, Cena o Consejos. No se ha guardado nada.`);
       return;
     }
     save();
@@ -303,19 +301,19 @@ function renderPauta() {
     render();
   };
   app.append(
-    el('p', { className: 'muted' }, 'Una opción por línea, con sus cantidades debajo empezando por guion (- 40 g de avena). Tu historial no cambia al actualizar la pauta.'),
-    ...MEALS.flatMap(meal => [
-      el('h2', {}, el('label', { htmlFor: `box-${meal}` }, LABELS[meal])),
-      boxes[meal],
+    el('p', { className: 'muted' }, 'Una opción por línea. Debajo de cada opción: «- » para ingredientes y «> » para preparación. «! » añade un consejo a toda la comida. Tu historial no cambia al actualizar la pauta.'),
+    ...SECTIONS.flatMap(section => [
+      el('h2', {}, el('label', { htmlFor: `box-${section}` }, LABELS[section])),
+      boxes[section],
     ]),
-    el('p', { className: 'muted' }, 'Si pegas la pauta entera en un cuadro, las líneas # Desayuno, # Comida, # Merienda y # Cena reparten cada opción en su sitio.'),
+    el('p', { className: 'muted' }, 'Si pegas la pauta entera en un cuadro, las líneas # Desayuno, # Comida, # Merienda, # Cena y # Consejos reparten cada parte en su sitio.'),
     el('button', { className: 'primary', onclick: onSave }, 'Guardar pauta'),
   );
 }
 
 function render() {
   app.replaceChildren();
-  ({ hoy: renderHoy, historial: renderHistorial, pauta: renderPauta })[tab]();
+  ({ hoy: renderHoy, historial: renderHistorial, consejos: renderConsejos, pauta: renderPauta })[tab]();
   document.getElementById('tabs').replaceChildren(...Object.entries(TABS).map(([id, label]) => el('button', {
     ...(id === tab ? { 'aria-current': 'page' } : {}),
     onclick: () => { tab = id; render(); window.scrollTo(0, 0); },

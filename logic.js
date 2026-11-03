@@ -1,10 +1,15 @@
 const MEALS = ['desayuno', 'comida', 'merienda', 'cena'];
+const GENERAL = 'consejos';
+const SECTIONS = [...MEALS, GENERAL];
 const CHEAT = 'Cheat meal';
 const BACKUP_EVERY_MS = 7 * 24 * 60 * 60 * 1000;
 
 const emptyOptions = () => ({ desayuno: [], comida: [], merienda: [], cena: [] });
 const emptyDetails = () => ({ desayuno: {}, comida: {}, merienda: {}, cena: {} });
-const emptyState = () => ({ options: emptyOptions(), details: emptyDetails(), log: {}, lastBackup: null });
+const emptyTips = () => ({ desayuno: [], comida: [], merienda: [], cena: [], consejos: [] });
+const emptyState = () => ({
+  options: emptyOptions(), details: emptyDetails(), prep: emptyDetails(), tips: emptyTips(), log: {}, lastBackup: null,
+});
 
 // Local time on purpose: toISOString() would put a late dinner on the wrong day.
 function dateKey(d) {
@@ -38,61 +43,75 @@ function setMeal(log, key, meal, text) {
   }
 }
 
-function toggle(log, key, meal, text) {
-  setMeal(log, key, meal, log[key]?.[meal] === text ? null : text);
-}
-
 const isCheat = text => text === CHEAT || (text || '').startsWith(CHEAT + ': ');
 const cheatText = note => (note.trim() ? `${CHEAT}: ${note.trim()}` : CHEAT);
 const cheatNote = text => (text || '').slice(CHEAT.length + 2);
 
 const normalize = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-// Each box holds one option per line, and "- " lines below an option are its ingredients.
-// A "# Comida" line sends what follows to that meal, so the whole plan can be pasted
-// into one box and replace the meals it names.
+// Each box holds one option per line. Below an option, "- " lines are ingredients and
+// "> " lines are preparation steps; "! " lines are tips for the whole meal.
+// A "# Comida" line sends what follows to that section, so the whole plan can be pasted
+// into one box and replace the sections it names.
 function parseBoxes(boxes) {
   const named = {};
   const plain = {};
-  for (const meal of MEALS) {
-    const lines = (boxes[meal] || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const slot = (where, section) => (where[section] = where[section] || { items: new Map(), tips: [] });
+  for (const box of SECTIONS) {
+    const lines = (boxes[box] || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     const target = lines.some(l => l.startsWith('#')) ? named : plain;
-    let current = meal;
-    let last = null;
+    let current = box;
+    let item = null;
     for (const line of lines) {
       if (line.startsWith('#')) {
         const header = normalize(line.replace(/^#+/, '').replace(/:$/, '').trim());
-        if (!MEALS.includes(header)) throw new Error(`No reconozco la cabecera "${line}"`);
+        if (!SECTIONS.includes(header)) throw new Error(`No reconozco la cabecera "${line}"`);
         current = header;
-        named[current] = named[current] || new Map();
-        last = null;
+        slot(named, current);
+        item = null;
+        continue;
+      }
+      const section = slot(target, current);
+      const text = line.replace(/^[-•*>!]\s*/, '');
+      if (current === GENERAL || line[0] === '!') {
+        section.tips.push(text);
+      } else if ('-•*'.includes(line[0]) && item) {
+        item.ingredients.push(text);
+      } else if (line[0] === '>' && item) {
+        item.prep.push(text);
       } else {
-        target[current] = target[current] || new Map();
-        const text = line.replace(/^[-•*]\s*/, '');
-        if (text !== line && last) {
-          last.push(text);
-        } else {
-          if (!target[current].has(text)) target[current].set(text, []);
-          last = target[current].get(text);
-        }
+        if (!section.items.has(text)) section.items.set(text, { ingredients: [], prep: [] });
+        item = section.items.get(text);
       }
     }
   }
-  const options = emptyOptions();
-  const details = emptyDetails();
-  for (const meal of MEALS) {
-    const entries = [...(named[meal] || plain[meal] || [])];
-    options[meal] = entries.map(([name]) => name);
-    details[meal] = Object.fromEntries(entries.filter(([, lines]) => lines.length));
+  const result = { options: emptyOptions(), details: emptyDetails(), prep: emptyDetails(), tips: emptyTips() };
+  for (const box of SECTIONS) {
+    const section = named[box] || plain[box];
+    if (!section) continue;
+    result.tips[box] = section.tips;
+    if (box === GENERAL) continue;
+    const entries = [...section.items];
+    result.options[box] = entries.map(([name]) => name);
+    result.details[box] = Object.fromEntries(entries.filter(([, i]) => i.ingredients.length).map(([n, i]) => [n, i.ingredients]));
+    result.prep[box] = Object.fromEntries(entries.filter(([, i]) => i.prep.length).map(([n, i]) => [n, i.prep]));
   }
-  return { options, details };
+  return result;
 }
 
 const detailsOf = (details, meal, name) => (Object.hasOwn(details[meal], name) ? details[meal][name] : []);
 
-const formatBox = (state, meal) => state.options[meal]
-  .flatMap(name => [name, ...detailsOf(state.details, meal, name).map(line => `- ${line}`)])
-  .join('\n');
+function formatBox(state, box) {
+  if (box === GENERAL) return state.tips[GENERAL].join('\n');
+  return [
+    ...state.tips[box].map(tip => `! ${tip}`),
+    ...state.options[box].flatMap(name => [
+      name,
+      ...detailsOf(state.details, box, name).map(line => `- ${line}`),
+      ...detailsOf(state.prep, box, name).map(line => `> ${line}`),
+    ]),
+  ].join('\n');
+}
 
 const isTextList = v => Array.isArray(v) && v.every(s => typeof s === 'string');
 
@@ -101,10 +120,15 @@ function isValidDetails(details) {
     details[m] && typeof details[m] === 'object' && Object.values(details[m]).every(isTextList));
 }
 
+const isValidTips = tips => tips && typeof tips === 'object' && SECTIONS.every(s => isTextList(tips[s]));
+
+// details, prep and tips are optional: data saved by earlier versions doesn't have them.
 function isValidData(d) {
   if (!d || typeof d.options !== 'object' || !d.options || typeof d.log !== 'object' || !d.log) return false;
   if (!MEALS.every(m => isTextList(d.options[m]))) return false;
   if (d.details !== undefined && !isValidDetails(d.details)) return false;
+  if (d.prep !== undefined && !isValidDetails(d.prep)) return false;
+  if (d.tips !== undefined && !isValidTips(d.tips)) return false;
   return Object.entries(d.log).every(([key, day]) =>
     /^\d{4}-\d{2}-\d{2}$/.test(key) && day && typeof day === 'object' &&
     Object.entries(day).every(([meal, text]) => MEALS.includes(meal) && typeof text === 'string' && text));
@@ -123,7 +147,14 @@ function loadState(raw) {
 }
 
 const makeBackup = (state, now) => ({
-  app: 'comidas', v: 1, createdAt: now.toISOString(), options: state.options, details: state.details, log: state.log,
+  app: 'comidas',
+  v: 1,
+  createdAt: now.toISOString(),
+  options: state.options,
+  details: state.details,
+  prep: state.prep,
+  tips: state.tips,
+  log: state.log,
 });
 
 function parseBackup(text) {
@@ -156,6 +187,8 @@ function mergeBackup(state, backup) {
     state: {
       options: hasOptions ? state.options : backup.options,
       details: hasOptions ? state.details : backup.details || emptyDetails(),
+      prep: hasOptions ? state.prep : backup.prep || emptyDetails(),
+      tips: hasOptions ? state.tips : backup.tips || emptyTips(),
       log,
       lastBackup: newer ? backup.createdAt : state.lastBackup,
     },
@@ -170,7 +203,7 @@ function needsBackup(state, now) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    MEALS, CHEAT, emptyState, dateKey, addDays, isWeekend, setMeal, toggle, isCheat, cheatText, cheatNote,
+    MEALS, GENERAL, SECTIONS, CHEAT, emptyState, dateKey, addDays, isWeekend, setMeal, isCheat, cheatText, cheatNote,
     parseBoxes, detailsOf, formatBox, loadState, makeBackup, parseBackup, mergeBackup, needsBackup,
   };
 }

@@ -1,5 +1,5 @@
 // Bump on every publish so phones pick up the new files. User data is in localStorage, not here.
-const CACHE = 'comidas-2';
+const CACHE = 'comidas-3';
 const FILES = ['./', 'index.html', 'logic.js', 'manifest.webmanifest', 'icon-180.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

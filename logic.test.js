@@ -20,13 +20,13 @@ test('isWeekend solo en sábado y domingo', () => {
   assert.equal(l.isWeekend('2026-11-09'), false);
 });
 
-test('toggle marca, cambia y desmarca sin dejar días vacíos', () => {
+test('setMeal marca, cambia y desmarca sin dejar días vacíos', () => {
   const log = {};
-  l.toggle(log, '2026-11-03', 'cena', 'Tortilla');
+  l.setMeal(log, '2026-11-03', 'cena', 'Tortilla');
   assert.equal(log['2026-11-03'].cena, 'Tortilla');
-  l.toggle(log, '2026-11-03', 'cena', 'Pescado');
+  l.setMeal(log, '2026-11-03', 'cena', 'Pescado');
   assert.equal(log['2026-11-03'].cena, 'Pescado');
-  l.toggle(log, '2026-11-03', 'cena', 'Pescado');
+  l.setMeal(log, '2026-11-03', 'cena', null);
   assert.deepEqual(log, {});
 });
 
@@ -59,12 +59,23 @@ test('una línea con guion tras una cabecera es una opción, no un ingrediente d
   assert.deepEqual(details.desayuno, {});
 });
 
-test('los cuadros de la pauta conservan los ingredientes al guardar de nuevo', () => {
-  const state = { ...l.emptyState(), ...l.parseBoxes({ desayuno: '# Cena\nSopa\n- 100 g de calabaza\nPescado' }) };
-  const again = l.parseBoxes(Object.fromEntries(l.MEALS.map(m => [m, l.formatBox(state, m)])));
-  assert.equal(l.formatBox(state, 'cena'), 'Sopa\n- 100 g de calabaza\nPescado');
-  assert.deepEqual(again.options, state.options);
-  assert.deepEqual(again.details, state.details);
+test('parseBoxes separa preparación, consejos de la comida y consejos generales', () => {
+  const pasted = '# Cena\n! Pesar antes\nSopa\n- 1 unidad de A\n> Paso uno\n> Paso dos\nPescado\n# Consejos\nBeber agua\n- Descansar\n! Caminar';
+  const r = l.parseBoxes({ desayuno: pasted });
+  assert.deepEqual(r.options.cena, ['Sopa', 'Pescado']);
+  assert.deepEqual(r.details.cena, { Sopa: ['1 unidad de A'] });
+  assert.deepEqual(r.prep.cena, { Sopa: ['Paso uno', 'Paso dos'] });
+  assert.deepEqual(r.tips.cena, ['Pesar antes']);
+  assert.deepEqual(r.tips.consejos, ['Beber agua', 'Descansar', 'Caminar']);
+});
+
+test('los cuadros de la pauta conservan todo al guardar de nuevo', () => {
+  const pasted = '# Cena\n! Pesar antes\nSopa\n- 1 unidad de A\n> Paso uno\nPescado\n# Consejos\nBeber agua';
+  const state = { ...l.emptyState(), ...l.parseBoxes({ desayuno: pasted }) };
+  const boxes = Object.fromEntries(l.SECTIONS.map(s => [s, l.formatBox(state, s)]));
+  assert.equal(boxes.cena, '! Pesar antes\nSopa\n- 1 unidad de A\n> Paso uno\nPescado');
+  assert.equal(boxes.consejos, 'Beber agua');
+  assert.deepEqual(l.parseBoxes(boxes), l.parseBoxes({ desayuno: pasted }));
 });
 
 test('detailsOf no confunde nombres de opción con propiedades internas', () => {
@@ -93,7 +104,7 @@ test('parseBoxes rechaza cabeceras desconocidas', () => {
 test('cambiar la pauta no altera el historial', () => {
   const state = l.emptyState();
   state.options.cena = ['Sopa'];
-  l.toggle(state.log, '2026-11-03', 'cena', 'Sopa');
+  l.setMeal(state.log, '2026-11-03', 'cena', 'Sopa');
   Object.assign(state, l.parseBoxes({ cena: 'Tortilla' }));
   assert.equal(state.log['2026-11-03'].cena, 'Sopa');
 });
@@ -119,10 +130,14 @@ test('los datos y copias sin ingredientes siguen funcionando', () => {
   assert.deepEqual(state.details.cena, {});
 });
 
-test('la copia guarda y restaura los ingredientes', () => {
-  const state = { ...l.emptyState(), ...l.parseBoxes({ cena: 'Sopa\n- 100 g de calabaza' }) };
+test('la copia guarda y restaura ingredientes, preparación y consejos', () => {
+  const state = { ...l.emptyState(), ...l.parseBoxes({ cena: '! Pesar antes\nSopa\n- 100 g de calabaza\n> Hervir', consejos: 'Beber agua' }) };
   const back = l.parseBackup(JSON.stringify(l.makeBackup(state, new Date('2026-11-03T20:00:00Z'))));
-  assert.deepEqual(l.mergeBackup(l.emptyState(), back).state.details.cena, { Sopa: ['100 g de calabaza'] });
+  const restored = l.mergeBackup(l.emptyState(), back).state;
+  assert.deepEqual(restored.details.cena, { Sopa: ['100 g de calabaza'] });
+  assert.deepEqual(restored.prep.cena, { Sopa: ['Hervir'] });
+  assert.deepEqual(restored.tips.cena, ['Pesar antes']);
+  assert.deepEqual(restored.tips.consejos, ['Beber agua']);
 
   const phone = { ...l.emptyState(), ...l.parseBoxes({ cena: 'Pescado\n- 110 g de merluza' }) };
   assert.deepEqual(l.mergeBackup(phone, back).state.details.cena, { Pescado: ['110 g de merluza'] });
@@ -131,7 +146,7 @@ test('la copia guarda y restaura los ingredientes', () => {
 test('copia de ida y vuelta', () => {
   const state = l.emptyState();
   state.options.cena = ['Sopa'];
-  l.toggle(state.log, '2026-11-03', 'cena', 'Sopa');
+  l.setMeal(state.log, '2026-11-03', 'cena', 'Sopa');
   const now = new Date('2026-11-03T20:00:00Z');
   const back = l.parseBackup(JSON.stringify(l.makeBackup(state, now)));
   const { state: restored, added } = l.mergeBackup(l.emptyState(), back);
@@ -173,6 +188,8 @@ test('un archivo inválido se rechaza', () => {
     JSON.stringify({ ...ok, app: 'otra' }),
     JSON.stringify({ ...ok, createdAt: 'ayer' }),
     JSON.stringify({ ...ok, options: { cena: 'Sopa' } }),
+    JSON.stringify({ ...ok, prep: { cena: {} } }),
+    JSON.stringify({ ...ok, tips: { cena: [] } }),
     JSON.stringify({ ...ok, details: { cena: {} } }),
     JSON.stringify({ ...ok, details: { desayuno: {}, comida: {}, merienda: {}, cena: { Sopa: 'calabaza' } } }),
     JSON.stringify({ ...ok, log: { ayer: {} } }),
@@ -187,7 +204,7 @@ test('needsBackup avisa a los 7 días, y no si no hay nada que guardar', () => {
   const state = l.emptyState();
   const now = new Date('2026-11-10T12:00:00Z');
   assert.equal(l.needsBackup(state, now), false);
-  l.toggle(state.log, '2026-11-03', 'cena', 'Sopa');
+  l.setMeal(state.log, '2026-11-03', 'cena', 'Sopa');
   assert.equal(l.needsBackup(state, now), true);
   state.lastBackup = '2026-11-04T12:00:00Z';
   assert.equal(l.needsBackup(state, now), false);
