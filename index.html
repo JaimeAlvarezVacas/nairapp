@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mis comidas</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Comidas">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f6f4ee" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1b1d1a" media="(prefers-color-scheme: dark)">
+<style>
+  :root {
+    --bg: #f6f4ee; --card: #fff; --text: #22251f; --muted: #686d62; --line: #dcd9cf;
+    --accent: #2f6b47; --on-accent: #fff; --warn-bg: #fbeed0; --warn-text: #5e4509;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1d1a; --card: #272a25; --text: #eceee8; --muted: #a4a99e; --line: #3b3f38;
+      --accent: #7cc497; --on-accent: #10231a; --warn-bg: #43361a; --warn-text: #f4dfa8;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 17px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  main {
+    max-width: 560px; margin: 0 auto;
+    padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 88px);
+  }
+  button, textarea, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  h2 { font-size: 15px; font-weight: 600; color: var(--muted); margin: 22px 0 8px; }
+  p { margin: 8px 0; }
+  .muted { color: var(--muted); font-size: 15px; }
+
+  .day { display: flex; align-items: center; gap: 8px; }
+  .day h1 { flex: 1; margin: 0; font-size: 20px; text-align: center; }
+  .day h1::first-letter, .entry h3::first-letter { text-transform: uppercase; }
+  .arrow {
+    width: 44px; height: 44px; font-size: 22px; border: 0; border-radius: 12px;
+    background: var(--card); border: 1px solid var(--line);
+  }
+  .arrow:disabled { opacity: .3; }
+  .today-link { display: block; margin: 8px auto 0; border: 0; background: none; color: var(--accent); min-height: 32px; }
+
+  .option {
+    display: flex; align-items: center; gap: 12px; width: 100%; min-height: 52px; padding: 10px 14px;
+    margin-bottom: 8px; text-align: left; background: var(--card);
+    border: 1px solid var(--line); border-radius: 14px;
+  }
+  .option::before {
+    content: ""; flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line);
+  }
+  .option[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 600; }
+  .option[aria-pressed="true"]::before {
+    border-color: var(--accent); background: var(--accent);
+    box-shadow: inset 0 0 0 4px var(--card);
+  }
+  .field {
+    width: 100%; padding: 10px 12px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; font-size: 16px;
+  }
+  .note { margin: 0 0 8px; }
+  textarea.field { min-height: 110px; resize: vertical; display: block; }
+
+  .banner { background: var(--warn-bg); color: var(--warn-text); border-radius: 14px; padding: 12px 14px; margin: 12px 0; }
+  .banner p { margin: 0 0 10px; }
+  .primary, .secondary { width: 100%; min-height: 48px; border-radius: 12px; font-weight: 600; padding: 8px 14px; }
+  .primary { background: var(--accent); color: var(--on-accent); border: 0; }
+  .secondary { background: var(--card); border: 1px solid var(--line); margin-top: 8px; }
+
+  .entry { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+  .entry h3 { margin: 0 0 6px; font-size: 16px; }
+  .entry dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; }
+  .entry dt { color: var(--muted); font-size: 15px; }
+  .entry dd { margin: 0; overflow-wrap: anywhere; }
+
+  nav {
+    position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--card);
+    border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom);
+  }
+  nav button { flex: 1; min-height: 56px; border: 0; background: none; color: var(--muted); font-size: 15px; font-weight: 600; }
+  nav button[aria-current="page"] { color: var(--accent); }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<nav id="tabs" aria-label="Secciones"></nav>
+<script src="logic.js"></script>
+<script>
+const KEY = 'comidas-v1';
+const LABELS = { desayuno: 'Desayuno', comida: 'Comida', merienda: 'Merienda', cena: 'Cena' };
+const TABS = { hoy: 'Hoy', historial: 'Historial', pauta: 'Pauta' };
+const app = document.getElementById('app');
+
+let tab = 'hoy';
+let viewDay = null; // null follows today, so the app rolls over at midnight
+let corruptFound = false;
+let state = emptyState();
+
+try {
+  const loaded = loadState(localStorage.getItem(KEY));
+  state = loaded.state;
+  if (loaded.corrupt !== null) {
+    corruptFound = true;
+    localStorage.setItem(`${KEY}-corrupt-${Date.now()}`, loaded.corrupt);
+  }
+} catch {
+  corruptFound = true;
+}
+navigator.storage?.persist?.();
+
+function save() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state));
+  } catch {
+    alert('No se ha podido guardar en el móvil. Haz una copia de seguridad desde Historial.');
+  }
+}
+
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else if (k in node) node[k] = v;
+    else node.setAttribute(k, v);
+  }
+  node.append(...children);
+  return node;
+}
+
+const longDate = key => keyToDate(key).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
+
+async function saveBackup() {
+  const now = new Date();
+  const file = new File(
+    [JSON.stringify(makeBackup(state, now), null, 1)],
+    `comidas-copia-${dateKey(now)}.json`,
+    { type: 'application/json' },
+  );
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Copia de Mis comidas' });
+    } catch (e) {
+      if (e.name !== 'AbortError') alert('No se ha podido guardar la copia.');
+      return;
+    }
+  } else {
+    const url = URL.createObjectURL(file);
+    el('a', { href: url, download: file.name }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+  state.lastBackup = now.toISOString();
+  save();
+  render();
+}
+
+async function restoreBackup(file) {
+  try {
+    if (file.size > 5 * 1024 * 1024) throw new Error('El archivo no es una copia válida');
+    const result = mergeBackup(state, parseBackup(await file.text()));
+    state = result.state;
+    corruptFound = false;
+    save();
+    render();
+    alert(`Copia restaurada. Comidas recuperadas: ${result.added}.`);
+  } catch (e) {
+    alert(`${e.message}. No se ha cambiado nada.`);
+  }
+}
+
+function banners() {
+  const out = [];
+  if (corruptFound) {
+    out.push(el('div', { className: 'banner', role: 'alert' },
+      el('p', {}, 'No se han podido leer los datos guardados. Restaura tu última copia desde Historial.')));
+  }
+  if (needsBackup(state, new Date())) {
+    out.push(el('div', { className: 'banner' },
+      el('p', {}, state.lastBackup
+        ? 'Hace más de una semana de tu última copia de seguridad.'
+        : 'Aún no tienes copia de seguridad de tu historial.'),
+      el('button', { className: 'primary', onclick: saveBackup }, 'Guardar copia')));
+  }
+  return out;
+}
+
+function mealSection(day, meal) {
+  const selected = state.log[day]?.[meal];
+  const pick = text => { toggle(state.log, day, meal, text); save(); render(); };
+  const option = text => el('button', {
+    className: 'option', 'aria-pressed': String(selected === text), onclick: () => pick(text),
+  }, text);
+
+  const list = [...state.options[meal]];
+  // A choice from an older plan stays visible so it can still be seen and undone.
+  if (selected && !list.includes(selected) && !(isCheat(selected) && isWeekend(day))) list.push(selected);
+  const section = el('section', {}, el('h2', {}, LABELS[meal]), ...list.map(option));
+
+  if (isWeekend(day)) {
+    const cheatOn = isCheat(selected);
+    section.append(el('button', {
+      className: 'option', 'aria-pressed': String(cheatOn), onclick: () => pick(cheatOn ? selected : CHEAT),
+    }, CHEAT));
+    if (cheatOn) {
+      section.append(el('input', {
+        className: 'field note', placeholder: '¿Qué ha sido? (opcional)', 'aria-label': `Cheat meal de ${LABELS[meal]}: qué ha sido`,
+        value: cheatNote(selected),
+        oninput: e => { setMeal(state.log, day, meal, cheatText(e.target.value)); save(); },
+      }));
+    }
+  }
+  return section;
+}
+
+function renderHoy() {
+  const today = dateKey(new Date());
+  const day = viewDay || today;
+  const go = n => {
+    const next = addDays(day, n);
+    viewDay = next === today ? null : next;
+    render();
+  };
+  const hasOptions = MEALS.some(m => state.options[m].length);
+  app.append(
+    el('div', { className: 'day' },
+      el('button', { className: 'arrow', 'aria-label': 'Día anterior', onclick: () => go(-1) }, '‹'),
+      el('h1', {}, day === today ? `Hoy, ${longDate(day)}` : longDate(day)),
+      el('button', { className: 'arrow', 'aria-label': 'Día siguiente', disabled: day >= today, onclick: () => go(1) }, '›')),
+    ...(day === today ? [] : [el('button', { className: 'today-link', onclick: () => { viewDay = null; render(); } }, 'Volver a hoy')]),
+    ...banners(),
+    ...(hasOptions ? [] : [el('div', { className: 'banner' },
+      el('p', {}, 'Todavía no hay pauta. Añade tus opciones para empezar.'),
+      el('button', { className: 'primary', onclick: () => { tab = 'pauta'; render(); } }, 'Añadir pauta'))]),
+    ...MEALS.map(meal => mealSection(day, meal)),
+  );
+}
+
+function renderHistorial() {
+  const picker = el('input', {
+    type: 'file', hidden: true,
+    onchange: e => { if (e.target.files[0]) restoreBackup(e.target.files[0]); e.target.value = ''; },
+  });
+  const days = Object.keys(state.log).sort().reverse();
+  app.append(
+    el('h2', {}, 'Copia de seguridad'),
+    el('p', { className: 'muted' }, state.lastBackup
+      ? `Última copia: ${new Date(state.lastBackup).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}. Guárdala en iCloud Drive.`
+      : 'Sin copias todavía. Guárdala en iCloud Drive: si borras la app, podrás recuperar tu historial.'),
+    el('button', { className: 'primary', onclick: saveBackup }, 'Guardar copia'),
+    el('button', { className: 'secondary', onclick: () => picker.click() }, 'Restaurar copia'),
+    picker,
+    el('h2', {}, 'Historial'),
+    ...(days.length ? [] : [el('p', { className: 'muted' }, 'Aquí verás lo que vayas marcando cada día.')]),
+    ...days.map(day => el('article', { className: 'entry' },
+      el('h3', {}, longDate(day)),
+      el('dl', {}, ...MEALS.filter(m => state.log[day][m]).flatMap(m => [
+        el('dt', {}, LABELS[m]), el('dd', {}, state.log[day][m]),
+      ])))),
+  );
+}
+
+function renderPauta() {
+  const boxes = {};
+  for (const meal of MEALS) {
+    boxes[meal] = el('textarea', {
+      className: 'field', id: `box-${meal}`, value: state.options[meal].join('\n'),
+    });
+  }
+  const onSave = () => {
+    try {
+      state.options = parseBoxes(Object.fromEntries(MEALS.map(m => [m, boxes[m].value])));
+    } catch (e) {
+      alert(`${e.message}. Usa Desayuno, Comida, Merienda o Cena. No se ha guardado nada.`);
+      return;
+    }
+    save();
+    tab = 'hoy';
+    viewDay = null;
+    render();
+  };
+  app.append(
+    el('p', { className: 'muted' }, 'Una opción por línea. Tu historial no cambia al actualizar la pauta.'),
+    ...MEALS.flatMap(meal => [
+      el('h2', {}, el('label', { htmlFor: `box-${meal}` }, LABELS[meal])),
+      boxes[meal],
+    ]),
+    el('p', { className: 'muted' }, 'Si pegas la pauta entera en un cuadro, las líneas # Desayuno, # Comida, # Merienda y # Cena reparten cada opción en su sitio.'),
+    el('button', { className: 'primary', onclick: onSave }, 'Guardar pauta'),
+  );
+}
+
+function render() {
+  app.replaceChildren();
+  ({ hoy: renderHoy, historial: renderHistorial, pauta: renderPauta })[tab]();
+  document.getElementById('tabs').replaceChildren(...Object.entries(TABS).map(([id, label]) => el('button', {
+    ...(id === tab ? { 'aria-current': 'page' } : {}),
+    onclick: () => { tab = id; render(); window.scrollTo(0, 0); },
+  }, label)));
+}
+
+// Skip the Pauta tab so coming back from copying the plan doesn't wipe what was typed.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && tab !== 'pauta') render();
+});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+render();
+</script>
+</body>
+</html>
