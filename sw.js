@@ -1,5 +1,5 @@
-// Bump on every publish so phones pick up the new files. User data is in localStorage, not here.
-const CACHE = 'comidas-3';
+// User data is in localStorage, not here. Bump only if FILES changes.
+const CACHE = 'comidas-4';
 const FILES = ['./', 'index.html', 'logic.js', 'manifest.webmanifest', 'icon-180.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -14,7 +14,18 @@ self.addEventListener('activate', e => {
     .then(() => self.clients.claim()));
 });
 
+// Network first, so a new version shows up on the next open; the cache is the offline fallback.
+// shortcut: no timeout, a very slow connection waits for the network; add one if it feels slow.
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(caches.match(e.request, { ignoreSearch: true }).then(hit => hit || fetch(e.request)));
+  e.respondWith(fetch(e.request, { cache: 'no-cache' })
+    .then(response => {
+      if (response.ok) {
+        const copy = response.clone();
+        e.waitUntil(caches.open(CACHE).then(c => c.put(e.request, copy)));
+      }
+      return response;
+    })
+    .catch(() => caches.match(e.request, { ignoreSearch: true })
+      .then(hit => hit || Response.error())));
 });
