@@ -776,6 +776,13 @@ function renderPauta() {
       className: 'secondary',
       onclick: () => attempt(() => parseBoxes(Object.fromEntries(SECTIONS.map(s => [s, boxes[s].value])))),
     }, 'Guardar cambios'),
+    ...(Object.keys(state.foodEdits).length ? [
+      el('h2', { className: 'section-title' }, '🏷️ Tus productos'),
+      el('div', { className: 'card stack' },
+        el('p', { className: 'soft' }, 'Calorías que has corregido con tus etiquetas. Se mantienen al pegar una pauta nueva.'),
+        el('ul', { className: 'ingredients' }, ...Object.entries(state.foodEdits).sort(([a], [b]) => a.localeCompare(b, 'es')).map(([food, { kcal, unit }]) =>
+          el('li', {}, el('span', {}, food), el('b', {}, `${shortNumber(kcal)} kcal ${unit === 'ud' ? 'por unidad' : 'por 100'}`))))),
+    ] : []),
     el('p', { className: 'soft help', style: 'margin-top:16px' },
       'Cada línea es una opción. Debajo, ', el('code', {}, '-'), ' indica un ingrediente, ', el('code', {}, '>'),
       ' un paso de preparación y ', el('code', {}, '!'), ' un consejo para toda la comida. Una línea como ',

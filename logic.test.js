@@ -470,3 +470,12 @@ test('nombres raros de alimento no rompen nada', () => {
   assert.equal(l.optionKcal(state, 'cena', 'Sopa'), 100);
   assert.equal({}.kcal, undefined);
 });
+
+test('una corrección sigue valiendo en la pauta siguiente aunque esta añada un alimento más corto', () => {
+  const state = { ...l.emptyState(), ...l.parseBoxes({ cena: 'Plato\n- 10 g de aceite de oliva', alimentos: 'aceite de oliva = 900' }) };
+  l.setFoodEdit(state, 'aceite de oliva', { kcal: 820, unit: '100' }, '2026-11-03');
+  Object.assign(state, l.applyPaste(state, '# Cena\nNuevo\n- 10 g de aceite de oliva virgen\n- 10 g de aceite y sal\n# Alimentos\naceite de oliva = 900\naceite = 900'));
+  assert.equal(l.partKcal(state, '10 g de aceite de oliva virgen').kcal, 82);
+  assert.equal(l.partKcal(state, '10 g de aceite y sal').kcal, 90);
+  assert.equal(l.optionKcal(state, 'cena', 'Nuevo'), 172);
+});
